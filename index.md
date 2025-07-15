@@ -60,8 +60,8 @@ how this would wreak havoc on a sorting algorithm that does nothing more than
 array comparison on the byte values.
 
 We need something better. Unicode is a large and complex system, and if we want
-a way of associating code points with collation weights, it will have to be
-defined explicitly. That's where the Unicode Collation Algorithm comes in.
+a way of mapping code points to collation weights, it will have to be defined
+explicitly. That's where the Unicode Collation Algorithm comes in.
 
 Testing Zig syntax highlighting:
 
