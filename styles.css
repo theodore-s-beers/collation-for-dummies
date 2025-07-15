@@ -6,9 +6,7 @@ body {
 }
 
 code {
-  font-family:
-    ui-monospace, Menlo, Monaco, "Cascadia Mono", Consolas, "Ubuntu Mono",
-    monospace;
+  font-family: "Cascadia Code", sans-serif;
   font-size: 0.95rem;
 }
 
