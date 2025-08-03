@@ -63,6 +63,29 @@ We need something better. Unicode is a large and complex system, and if we want
 a way of mapping code points to collation weights, it will have to be defined
 explicitly. That's where the Unicode Collation Algorithm comes in.
 
+## Basic Idea
+
+_Some of what follows is oversimplification. If you are already familiar with
+this subject, please try to be charitable. I'll go into greater detail as the
+post progresses._
+
+The central concept of Unicode collation is that one character might belong or
+after another character on different bases. They may represent fundamentally
+different letters, like E and F; they may be different forms of something
+understood to be the "same" leter, like E and É; or they may be closer still,
+differing only in case, like E and e. Of course, languages and writing systems
+are extremely diverse, and not all of them even have a concept of uppercase vs.
+lowercase. But it turns out that allowing for a hierarchy of three (or sometimes
+four) levels of collation difference between code points is generally sufficient
+to get the job done. In a writing system like the Latin alphabet, these levels
+are indeed organized as I hinted above: the _primary_ level of collation
+distinguishes among different base letters; the _secondary_ level distinguishes
+among diacritics, like accents; and the _tertiary_ level accounts for case
+differences. If we assign to each code point in the Unicode tables a set of
+primary, secondary, and tertiary _collation weights_, we can then decide which
+of them sorts before the other by comparing their weights one level at a time.
+And this can be extrapolated to collate strings.
+
 Testing Zig syntax highlighting:
 
 ```zig
