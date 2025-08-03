@@ -271,12 +271,12 @@
     <h2 id="introduction">Introduction</h2>
     <p>
       Given two strings of UTF-8-endoded text—let’s say, for example, the names
-      “Ernie” and “Frank”—it is trivial for a computer to determine which of
+      “Edgar” and “Frank”—it is trivial for a computer to determine which of
       them should come first alphabetically. If we look at a representation of
-      those strings as arrays of byte values, we find that “Ernie” is (in
-      hexadecimal) <code>[45, 72, 6E, 69, 65]</code>; and “Frank” is
+      those strings as arrays of byte values, we find that “Edgar” is (in
+      hexadecimal) <code>[45, 64, 67, 61, 72]</code>; and “Frank” is
       <code>[46, 72, 61, 6E, 6B]</code>. Simple array comparison yields a
-      difference at index 0, with E being “less than” F, so that Ernie sorts
+      difference at index 0, with E being “less than” F, so that Edgar sorts
       before Frank. This is a happy consequence of the fact that early text
       encoding schemes—notably ASCII, which was inherited by Unicode—assigned
       numerical values to the letters that they included in
@@ -297,7 +297,7 @@
       combination of two characters, <code>U+0045</code> and
       <code>U+0301</code>, accounting for the base letter and the accent,
       respectively. (I wanted to bring up the “decomposed representation” as
-      early as possible in this post, since that is the form that we generally
+      early as possible in this post, since it is the form that we generally
       want for Unicode sorting/collation. More on this later…)
     </p>
     <p>

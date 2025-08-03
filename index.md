@@ -23,12 +23,12 @@ collation._
 ## Introduction
 
 Given two strings of UTF-8-endoded text---let's say, for example, the names
-"Ernie" and "Frank"---it is trivial for a computer to determine which of them
+"Edgar" and "Frank"---it is trivial for a computer to determine which of them
 should come first alphabetically. If we look at a representation of those
-strings as arrays of byte values, we find that "Ernie" is (in hexadecimal)
-`[45, 72, 6E, 69, 65]`; and "Frank" is `[46, 72, 61, 6E, 6B]`. Simple array
+strings as arrays of byte values, we find that "Edgar" is (in hexadecimal)
+`[45, 64, 67, 61, 72]`; and "Frank" is `[46, 72, 61, 6E, 6B]`. Simple array
 comparison yields a difference at index 0, with E being "less than" F, so that
-Ernie sorts before Frank. This is a happy consequence of the fact that early
+Edgar sorts before Frank. This is a happy consequence of the fact that early
 text encoding schemes---notably ASCII, which was inherited by Unicode---assigned
 numerical values to the letters that they included in _a kind of_ alphabetical
 order. There is still the issue that ASCII groups all the uppercase letters
@@ -45,8 +45,8 @@ representations in Unicode: either as a single character, `U+00C9`, for a Latin
 capital E with an acute accent; or as a combination of two characters, `U+0045`
 and `U+0301`, accounting for the base letter and the accent, respectively. (I
 wanted to bring up the "decomposed representation" as early as possible in this
-post, since that is the form that we generally want for Unicode
-sorting/collation. More on this later...)
+post, since it is the form that we generally want for Unicode sorting/collation.
+More on this later...)
 
 Both of these representations will break the naïve approach to sorting, in their
 own ways. `C9` as a byte value is greater than any in the ASCII/Basic Latin
