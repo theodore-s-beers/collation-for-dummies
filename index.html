@@ -8,7 +8,6 @@
       content="width=device-width, initial-scale=1.0, user-scalable=yes"
     />
     <meta name="author" content="Theodore Beers" />
-    <meta name="dcterms.date" content="2025-07-14" />
     <title>Unicode Collation for Dummies</title>
     <style>
       code {
@@ -243,7 +242,7 @@
     <header id="title-block-header">
       <h1 class="title">Unicode Collation for Dummies</h1>
       <p class="author">Theodore Beers</p>
-      <p class="date">14 July 2025</p>
+      <p class="date">August 2025</p>
     </header>
     <p>
       This post is meant as an introduction to the
@@ -270,7 +269,7 @@
     </p>
     <h2 id="introduction">Introduction</h2>
     <p>
-      Given two strings of UTF-8-endoded text—let’s say, for example, the names
+      Given two strings of UTF-8-encoded text—let’s say, for example, the names
       “Edgar” and “Frank”—it is trivial for a computer to determine which of
       them should come first alphabetically. If we look at a representation of
       those strings as arrays of byte values, we find that “Edgar” is (in
@@ -286,6 +285,14 @@
       an alphabetical order of byte values within the uppercase and lowercase
       groups.
     </p>
+    <div class="sourceCode" id="cb1">
+      <pre
+        class="sourceCode default"
+      ><code class="sourceCode default"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a>Edgar</span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a>Frank</span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a>Zardoz</span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a>earnest # Not ideal</span></code></pre>
+    </div>
     <p>
       Back to the larger problem: what happens if we add, say, “Élodie” to our
       list of names? A human will understand intuitively that E and É belong
@@ -297,15 +304,15 @@
       combination of two characters, <code>U+0045</code> and
       <code>U+0301</code>, accounting for the base letter and the accent,
       respectively. (I wanted to bring up the “decomposed representation” as
-      early as possible in this post, since it is the form that we generally
-      want for Unicode sorting/collation. More on this later…)
+      early as possible in this post, since it’s the form that we generally want
+      for Unicode sorting/collation. More on this later…)
     </p>
     <p>
       Both of these representations will break the naïve approach to sorting, in
       their own ways. <code>C9</code> as a byte value is greater than any in the
       ASCII/Basic Latin table, meaning that “Élodie” would sort after, say,
-      “Zoë.” Using the decomposed form seems promising—the first byte value is
-      simply that of E, appropriate for sorting—but the combining accent
+      “Zardoz.” Using the decomposed form seems promising—the first byte value
+      is simply that of E, appropriate for sorting—but the combining accent
       character introduces new problems. <code>0x301</code>
       is too large to be represented in a single byte, so in UTF-8 it becomes
       <code>[CC, 81]</code>. “Élodie” in decomposed form is made up of seven
@@ -313,74 +320,371 @@
       six letters. It should be obvious how this would wreak havoc on a sorting
       algorithm that does nothing more than array comparison on the byte values.
     </p>
+    <div class="sourceCode" id="cb2">
+      <pre
+        class="sourceCode default"
+      ><code class="sourceCode default"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a>Edgar</span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a>Zardoz</span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a>earnest</span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a>Élodie  # Assuming form NFC</span></code></pre>
+    </div>
     <p>
-      We need something better. Unicode is a large and complex system, and if we
-      want a way of mapping code points to collation weights, it will have to be
-      defined explicitly. That’s where the Unicode Collation Algorithm comes in.
+      <strong>We need something better.</strong> Unicode is a large and complex
+      system, and if we want a way of mapping code points to collation weights,
+      it will have to be defined explicitly. That’s where the Unicode Collation
+      Algorithm comes in.
     </p>
     <h2 id="basic-idea">Basic Idea</h2>
     <p>
       <em
-        >Some of what follows is oversimplification. If you are already familiar
+        >Some of what follows is oversimplification. If you’re already familiar
         with this subject, please try to be charitable. I’ll go into greater
         detail as the post progresses.</em
       >
     </p>
     <p>
       The central concept of Unicode collation is that one character might
-      belong or after another character on different bases. They may represent
-      fundamentally different letters, like E and F; they may be different forms
-      of something understood to be the “same” leter, like E and É; or they may
-      be closer still, differing only in case, like E and e. Of course,
-      languages and writing systems are extremely diverse, and not all of them
-      even have a concept of uppercase vs. lowercase. But it turns out that
-      allowing for a hierarchy of three (or sometimes four) levels of collation
-      difference between code points is generally sufficient to get the job
-      done. In a writing system like the Latin alphabet, these levels are indeed
+      belong before/after another character on different bases. They may
+      represent fundamentally different letters, like E and F; they may be
+      different forms of something understood to be the “same” letter, like E
+      and É; or they may be closer still, differing only in case, like E and e.
+      Of course, languages and writing systems are extremely diverse, and not
+      all of them even have a concept of uppercase vs. lowercase. But it turns
+      out that allowing for a hierarchy of three (or sometimes four) levels of
+      collation difference between code points is generally sufficient to get
+      the job done.
+    </p>
+    <p>
+      In a writing system like the Latin alphabet, these levels are indeed
       organized as I hinted above: the <em>primary</em> level of collation
       distinguishes among different base letters; the <em>secondary</em> level
-      distinguishes among diacritics, like accents; and the
-      <em>tertiary</em> level accounts for case differences. If we assign to
-      each code point in the Unicode tables a set of primary, secondary, and
-      tertiary <em>collation weights</em>, we can then decide which of them
-      sorts before the other by comparing their weights one level at a time. And
-      this can be extrapolated to collate strings.
+      distinguishes among diacritics, like accents; and the <em>tertiary</em>
+      level accounts for case differences. If we assign to each code point in
+      the Unicode tables a set of primary, secondary, and tertiary
+      <em>collation weights</em>, we can then decide which of them sorts before
+      the other by comparing their weights one level at a time. And this can be
+      extrapolated to collate entire strings.
     </p>
-    <p>Testing Zig syntax highlighting:</p>
-    <div class="sourceCode" id="cb1">
+    <p>
+      Let’s look at some real examples from the
+      <strong>Default Unicode Collation Element Table</strong> (<a
+        href="https://www.unicode.org/Public/UCA/latest/allkeys.txt"
+        >DUCET</a
+      >), one of the standard documents that Unicode publishes in order to make
+      this possible. NB, the following lines are not necessarily adjacent in the
+      original; I’m pulling examples from different areas.
+    </p>
+    <div class="sourceCode" id="cb3">
+      <pre
+        class="sourceCode default"
+      ><code class="sourceCode default"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a>0301  ; [.0000.0024.0002]                  # COMBINING ACUTE ACCENT</span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a>0045  ; [.23E7.0020.0008]                  # LATIN CAPITAL LETTER E</span>
+<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a>00C9  ; [.23E7.0020.0008][.0000.0024.0002] # LATIN CAPITAL LETTER E WITH ACUTE</span>
+<span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a>0058  ; [.2660.0020.0008]                  # LATIN CAPITAL LETTER X</span>
+<span id="cb3-5"><a href="#cb3-5" aria-hidden="true" tabindex="-1"></a>1D54F ; [.2660.0020.000B]                  # MATHEMATICAL DOUBLE-STRUCK CAPITAL X</span>
+<span id="cb3-6"><a href="#cb3-6" aria-hidden="true" tabindex="-1"></a>007A  ; [.2682.0020.0002]                  # LATIN SMALL LETTER Z</span>
+<span id="cb3-7"><a href="#cb3-7" aria-hidden="true" tabindex="-1"></a>0642  ; [.2AF9.0020.0002]                  # ARABIC LETTER QAF</span></code></pre>
+    </div>
+    <p>
+      What we find in each line is the code point; a semicolon separator; one or
+      more <em>sets of weights</em>, each consisting of primary, secondary, and
+      tertiary parts; and a comment giving the official name of the Unicode
+      scalar value. <em>All numerical values are in hexadecimal.</em> We can
+      look at one in greater detail:
+    </p>
+    <div class="sourceCode" id="cb4">
+      <pre
+        class="sourceCode default"
+      ><code class="sourceCode default"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a>0058  ; [.2660.0020.0008] # LATIN CAPITAL LETTER X</span>
+<span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a>^         ^    ^    ^       ^</span>
+<span id="cb4-3"><a href="#cb4-3" aria-hidden="true" tabindex="-1"></a>cp        p    s    t       name</span></code></pre>
+    </div>
+    <p>
+      Hopefully you can see already where this is going. If we want to determine
+      the proper lexicographical order of two characters—to take the simplest
+      scenario possible—we can find their collation weights and compare them at
+      the primary, then the secondary, then the tertiary level, returning as
+      soon as we find a difference. Look, for example, at the respective weights
+      of an ordinary capital letter X and the “mathematical double-struck
+      capital X,” i.e., the logo of the site formerly known as Twitter. They
+      differ only at the tertiary level: both belong to the X family, and
+      neither has a diacritic.
+    </p>
+    <div class="sourceCode" id="cb5">
+      <pre
+        class="sourceCode default"
+      ><code class="sourceCode default"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a>0058  ; [.2660.0020.0008] # LATIN CAPITAL LETTER X</span>
+<span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a>1D54F ; [.2660.0020.000B] # MATHEMATICAL DOUBLE-STRUCK CAPITAL X</span></code></pre>
+    </div>
+    <p>
+      The reality of Unicode collation ends up being significantly more complex
+      than this, but we can start on the happy path.
+    </p>
+    <h2 id="simple-but-real-examples">Simple but Real Examples</h2>
+    <h3 id="élodie-and-frank">Élodie and Frank</h3>
+    <p>
+      Armed with our fledgling understanding of how the Unicode Collation
+      Algorithm works, let’s return to the test case of placing the names
+      “Élodie” and “Frank” in alphabetical order. We’ll begin by representing
+      them as arrays of code points, each of which has its assigned collation
+      weights in the standard table.
+    </p>
+    <p>
+      First, Élodie (note that we use the <em>decomposed</em> form of É; this is
+      a crucial part of the UCA):
+    </p>
+    <div class="sourceCode" id="cb6">
+      <pre
+        class="sourceCode default"
+      ><code class="sourceCode default"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a>0045  ; [.23E7.0020.0008] # LATIN CAPITAL LETTER E</span>
+<span id="cb6-2"><a href="#cb6-2" aria-hidden="true" tabindex="-1"></a>0301  ; [.0000.0024.0002] # COMBINING ACUTE ACCENT</span>
+<span id="cb6-3"><a href="#cb6-3" aria-hidden="true" tabindex="-1"></a>006C  ; [.24BC.0020.0002] # LATIN SMALL LETTER L</span>
+<span id="cb6-4"><a href="#cb6-4" aria-hidden="true" tabindex="-1"></a>006F  ; [.252C.0020.0002] # LATIN SMALL LETTER O</span>
+<span id="cb6-5"><a href="#cb6-5" aria-hidden="true" tabindex="-1"></a>0064  ; [.23CA.0020.0002] # LATIN SMALL LETTER D</span>
+<span id="cb6-6"><a href="#cb6-6" aria-hidden="true" tabindex="-1"></a>0069  ; [.2473.0020.0002] # LATIN SMALL LETTER I</span>
+<span id="cb6-7"><a href="#cb6-7" aria-hidden="true" tabindex="-1"></a>0065  ; [.23E7.0020.0002] # LATIN SMALL LETTER E</span></code></pre>
+    </div>
+    <p>Next, Frank:</p>
+    <div class="sourceCode" id="cb7">
+      <pre
+        class="sourceCode default"
+      ><code class="sourceCode default"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a>0046  ; [.2422.0020.0008] # LATIN CAPITAL LETTER F</span>
+<span id="cb7-2"><a href="#cb7-2" aria-hidden="true" tabindex="-1"></a>0072  ; [.2584.0020.0002] # LATIN SMALL LETTER R</span>
+<span id="cb7-3"><a href="#cb7-3" aria-hidden="true" tabindex="-1"></a>0061  ; [.2380.0020.0002] # LATIN SMALL LETTER A</span>
+<span id="cb7-4"><a href="#cb7-4" aria-hidden="true" tabindex="-1"></a>006E  ; [.2505.0020.0002] # LATIN SMALL LETTER N</span>
+<span id="cb7-5"><a href="#cb7-5" aria-hidden="true" tabindex="-1"></a>006B  ; [.24A8.0020.0002] # LATIN SMALL LETTER K</span></code></pre>
+    </div>
+    <p>
+      Since the first round of collation checking will be on the primary weights
+      of these two words, we can pull those out and make a simpler array of
+      primaries for each word, called a <em>sort key</em>.
+    </p>
+    <p>
+      It’s important to note that <em>only nonzero weights</em> are considered
+      here. As you can see, the “combining acute accent” character has no
+      primary weight. We ignore that zero when constructing the sort key. This
+      is necessary so that, for example, two words like “Maria” and “María,”
+      which differ only by an accent, are <em>identical</em> at the primary
+      level. Allowing a zero primary weight for an accent character to enter the
+      sort key would immediately break collation. Anyway, our primary-level sort
+      keys for “Élodie” and “Frank” are as follows:
+    </p>
+    <div class="sourceCode" id="cb8">
+      <pre
+        class="sourceCode default"
+      ><code class="sourceCode default"><span id="cb8-1"><a href="#cb8-1" aria-hidden="true" tabindex="-1"></a>[23E7, 24BC, 252C, 23CA, 2473, 23E7] # Élodie</span>
+<span id="cb8-2"><a href="#cb8-2" aria-hidden="true" tabindex="-1"></a>[2422, 2584, 2380, 2505, 24A8]       # Frank</span></code></pre>
+    </div>
+    <p>
+      You don’t have to be a genius to figure this out. We’re back to
+      straightforward array comparison, and we can reach a decision at index 0:
+      “Élodie” belongs first.
+    </p>
+    <h3 id="élodie-and-elodie">Élodie and Elodie</h3>
+    <p>
+      Now for a bit of a contrived example: what if we also had the name
+      “Elodie” without the accent? How would collation proceed? We already know
+      what the primary-level sort key would be for both words:
+    </p>
+    <div class="sourceCode" id="cb9">
+      <pre
+        class="sourceCode default"
+      ><code class="sourceCode default"><span id="cb9-1"><a href="#cb9-1" aria-hidden="true" tabindex="-1"></a>[23E7, 24BC, 252C, 23CA, 2473, 23E7] # Élodie or Elodie (primary)</span></code></pre>
+    </div>
+    <p>
+      That is, comparison at the primary level would yield no difference. We
+      then move to the secondary level, again building sort keys out of all
+      nonzero weights:
+    </p>
+    <div class="sourceCode" id="cb10">
+      <pre
+        class="sourceCode default"
+      ><code class="sourceCode default"><span id="cb10-1"><a href="#cb10-1" aria-hidden="true" tabindex="-1"></a>[0020, 0024, 0020, 0020, 0020, 0020, 0020] # Élodie (secondary)</span>
+<span id="cb10-2"><a href="#cb10-2" aria-hidden="true" tabindex="-1"></a>[0020, 0020, 0020, 0020, 0020, 0020]       # Elodie (secondary)</span></code></pre>
+    </div>
+    <p>
+      Now we see that “Élodie” has an extra element in its list of secondary
+      weights, and it is higher than the others. We reach a decision at index 1
+      in the secondary sort key: “Elodie” (sans accent) belongs first.
+    </p>
+    <h3 id="frank-and-frank">Frank and frank</h3>
+    <p>
+      For the sake of thoroughness, let’s also consider two words that differ
+      only in case, i.e., at the tertiary level. The name “Frank” and the common
+      adjective “frank” will work nicely for this. We can add to the previous
+      list of weights the values for lowercase f:
+    </p>
+    <div class="sourceCode" id="cb11">
+      <pre
+        class="sourceCode default"
+      ><code class="sourceCode default"><span id="cb11-1"><a href="#cb11-1" aria-hidden="true" tabindex="-1"></a>0066  ; [.2422.0020.0002] # LATIN SMALL LETTER F</span>
+<span id="cb11-2"><a href="#cb11-2" aria-hidden="true" tabindex="-1"></a>0046  ; [.2422.0020.0008] # LATIN CAPITAL LETTER F</span>
+<span id="cb11-3"><a href="#cb11-3" aria-hidden="true" tabindex="-1"></a>0072  ; [.2584.0020.0002] # LATIN SMALL LETTER R</span>
+<span id="cb11-4"><a href="#cb11-4" aria-hidden="true" tabindex="-1"></a>0061  ; [.2380.0020.0002] # LATIN SMALL LETTER A</span>
+<span id="cb11-5"><a href="#cb11-5" aria-hidden="true" tabindex="-1"></a>006E  ; [.2505.0020.0002] # LATIN SMALL LETTER N</span>
+<span id="cb11-6"><a href="#cb11-6" aria-hidden="true" tabindex="-1"></a>006B  ; [.24A8.0020.0002] # LATIN SMALL LETTER K</span></code></pre>
+    </div>
+    <p>The primary-level sort key will not yield a difference:</p>
+    <div class="sourceCode" id="cb12">
+      <pre
+        class="sourceCode default"
+      ><code class="sourceCode default"><span id="cb12-1"><a href="#cb12-1" aria-hidden="true" tabindex="-1"></a>[2422, 2584, 2380, 2505, 24A8] # Frank or frank (primary)</span></code></pre>
+    </div>
+    <p>Nor will the secondary-level sort key:</p>
+    <div class="sourceCode" id="cb13">
+      <pre
+        class="sourceCode default"
+      ><code class="sourceCode default"><span id="cb13-1"><a href="#cb13-1" aria-hidden="true" tabindex="-1"></a>[0020, 0020, 0020, 0020, 0020] # Frank or frank (secondary)</span></code></pre>
+    </div>
+    <p>But we finally have something at the tertiary level:</p>
+    <div class="sourceCode" id="cb14">
+      <pre
+        class="sourceCode default"
+      ><code class="sourceCode default"><span id="cb14-1"><a href="#cb14-1" aria-hidden="true" tabindex="-1"></a>[0008, 0002, 0002, 0002, 0002] # Frank (tertiary)</span>
+<span id="cb14-2"><a href="#cb14-2" aria-hidden="true" tabindex="-1"></a>[0002, 0002, 0002, 0002, 0002] # frank (tertiary)</span></code></pre>
+    </div>
+    <p>
+      At index 0 in the tertiary sort key, we see that “frank” belongs first.
+    </p>
+    <p>
+      <em
+        >This is a noteworthy difference between the Unicode Collation Algorithm
+        and ASCII sorting: the order of the cases is reversed! An implementation
+        of the UCA can of course make this configurable; it’s trivial to set a
+        flag and have comparisons reversed at the tertiary level. But the
+        difference in default behavior is interesting nonetheless.</em
+      >
+    </p>
+    <h2 id="the-plot-thickens">The Plot Thickens</h2>
+    <p>
+      Some readers may like to stop here. I’ve given you enough of a primer that
+      you could explain the general idea behind Unicode collation and how it
+      works. You could even, with reference to a copy of
+      <code>allkeys.txt</code> (i.e., the DUCET file), perform manual collation
+      of one string against another. That should be more than enough to impress
+      someone at a cocktail party.
+    </p>
+    <p>
+      But I want to go on and show, in greater detail, what is actually involved
+      in writing a conformant implementation of the UCA—i.e., an implementation
+      that passes the punishingly rigorous
+      <a href="https://www.unicode.org/Public/UCA/latest/CollationTest.html"
+        >conformance tests</a
+      >
+      that are published alongside the technical standard. So if you’re
+      interested in digging deeper, feel free to stick around and keep reading.
+    </p>
+    <p>
+      I think it will be helpful for most of the remainder of this post to be
+      guided by the actual code of the collation routine that I wrote for my Zig
+      library, <a href="https://github.com/theodore-s-beers/later">later</a>.
+      This comes from <code>src/collator.zig</code>:
+    </p>
+    <div class="sourceCode" id="cb15">
       <pre
         class="sourceCode zig"
-      ><code class="sourceCode zig"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="kw">test</span> <span class="st">&quot;sort multilingual list of names&quot;</span> {</span>
-<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a>    <span class="at">const</span> alloc <span class="op">=</span> std<span class="op">.</span>testing<span class="op">.</span>allocator;</span>
-<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a>    <span class="at">var</span> coll <span class="op">=</span> <span class="cf">try</span> Collator<span class="op">.</span>initDefault(alloc);</span>
-<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a>    <span class="cf">defer</span> coll<span class="op">.</span>deinit();</span>
-<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a>    <span class="at">var</span> input <span class="op">=</span> [_][]<span class="at">const</span> <span class="dt">u8</span>{</span>
-<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a>        <span class="st">&quot;چنگیز&quot;</span><span class="op">,</span></span>
-<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a>        <span class="st">&quot;Éloi&quot;</span><span class="op">,</span></span>
-<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a>        <span class="st">&quot;Ötzi&quot;</span><span class="op">,</span></span>
-<span id="cb1-11"><a href="#cb1-11" aria-hidden="true" tabindex="-1"></a>        <span class="st">&quot;Melissa&quot;</span><span class="op">,</span></span>
-<span id="cb1-12"><a href="#cb1-12" aria-hidden="true" tabindex="-1"></a>        <span class="st">&quot;صدام&quot;</span><span class="op">,</span></span>
-<span id="cb1-13"><a href="#cb1-13" aria-hidden="true" tabindex="-1"></a>        <span class="st">&quot;Mélissa&quot;</span><span class="op">,</span></span>
-<span id="cb1-14"><a href="#cb1-14" aria-hidden="true" tabindex="-1"></a>        <span class="st">&quot;Overton&quot;</span><span class="op">,</span></span>
-<span id="cb1-15"><a href="#cb1-15" aria-hidden="true" tabindex="-1"></a>        <span class="st">&quot;Elrond&quot;</span><span class="op">,</span></span>
-<span id="cb1-16"><a href="#cb1-16" aria-hidden="true" tabindex="-1"></a>    };</span>
-<span id="cb1-17"><a href="#cb1-17" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-18"><a href="#cb1-18" aria-hidden="true" tabindex="-1"></a>    <span class="at">const</span> expected <span class="op">=</span> [_][]<span class="at">const</span> <span class="dt">u8</span>{</span>
-<span id="cb1-19"><a href="#cb1-19" aria-hidden="true" tabindex="-1"></a>        <span class="st">&quot;Éloi&quot;</span><span class="op">,</span></span>
-<span id="cb1-20"><a href="#cb1-20" aria-hidden="true" tabindex="-1"></a>        <span class="st">&quot;Elrond&quot;</span><span class="op">,</span></span>
-<span id="cb1-21"><a href="#cb1-21" aria-hidden="true" tabindex="-1"></a>        <span class="st">&quot;Melissa&quot;</span><span class="op">,</span></span>
-<span id="cb1-22"><a href="#cb1-22" aria-hidden="true" tabindex="-1"></a>        <span class="st">&quot;Mélissa&quot;</span><span class="op">,</span></span>
-<span id="cb1-23"><a href="#cb1-23" aria-hidden="true" tabindex="-1"></a>        <span class="st">&quot;Ötzi&quot;</span><span class="op">,</span></span>
-<span id="cb1-24"><a href="#cb1-24" aria-hidden="true" tabindex="-1"></a>        <span class="st">&quot;Overton&quot;</span><span class="op">,</span></span>
-<span id="cb1-25"><a href="#cb1-25" aria-hidden="true" tabindex="-1"></a>        <span class="st">&quot;چنگیز&quot;</span><span class="op">,</span></span>
-<span id="cb1-26"><a href="#cb1-26" aria-hidden="true" tabindex="-1"></a>        <span class="st">&quot;صدام&quot;</span><span class="op">,</span></span>
-<span id="cb1-27"><a href="#cb1-27" aria-hidden="true" tabindex="-1"></a>    };</span>
-<span id="cb1-28"><a href="#cb1-28" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-29"><a href="#cb1-29" aria-hidden="true" tabindex="-1"></a>    std<span class="op">.</span>mem<span class="op">.</span>sort([]<span class="at">const</span> <span class="dt">u8</span><span class="op">,</span> <span class="op">&amp;</span>input<span class="op">,</span> <span class="op">&amp;</span>coll<span class="op">,</span> collateComparator);</span>
-<span id="cb1-30"><a href="#cb1-30" aria-hidden="true" tabindex="-1"></a>    <span class="cf">try</span> std<span class="op">.</span>testing<span class="op">.</span>expectEqualSlices([]<span class="at">const</span> <span class="dt">u8</span><span class="op">,</span> <span class="op">&amp;</span>expected<span class="op">,</span> <span class="op">&amp;</span>input);</span>
-<span id="cb1-31"><a href="#cb1-31" aria-hidden="true" tabindex="-1"></a>}</span></code></pre>
+      ><code class="sourceCode zig"><span id="cb15-1"><a href="#cb15-1" aria-hidden="true" tabindex="-1"></a><span class="kw">pub</span> <span class="kw">fn</span> collateFallible(<span class="va">self</span><span class="op">:</span> <span class="op">*</span>Collator<span class="op">,</span> a<span class="op">:</span> []<span class="at">const</span> <span class="dt">u8</span><span class="op">,</span> b<span class="op">:</span> []<span class="at">const</span> <span class="dt">u8</span>) <span class="op">!</span>std<span class="op">.</span>math<span class="op">.</span>Order {</span>
+<span id="cb15-2"><a href="#cb15-2" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> (std<span class="op">.</span>mem<span class="op">.</span>eql(<span class="dt">u8</span><span class="op">,</span> a<span class="op">,</span> b)) <span class="cf">return</span> <span class="op">.</span>eq;</span>
+<span id="cb15-3"><a href="#cb15-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb15-4"><a href="#cb15-4" aria-hidden="true" tabindex="-1"></a>    <span class="cf">try</span> decode<span class="op">.</span>bytesToCodepoints(<span class="op">&amp;</span><span class="va">self</span><span class="op">.</span>a_chars<span class="op">,</span> a);</span>
+<span id="cb15-5"><a href="#cb15-5" aria-hidden="true" tabindex="-1"></a>    <span class="cf">try</span> decode<span class="op">.</span>bytesToCodepoints(<span class="op">&amp;</span><span class="va">self</span><span class="op">.</span>b_chars<span class="op">,</span> b);</span>
+<span id="cb15-6"><a href="#cb15-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb15-7"><a href="#cb15-7" aria-hidden="true" tabindex="-1"></a>    <span class="co">// ASCII fast path</span></span>
+<span id="cb15-8"><a href="#cb15-8" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> (ascii<span class="op">.</span>tryAscii(<span class="va">self</span><span class="op">.</span>a_chars<span class="op">.</span>items<span class="op">,</span> <span class="va">self</span><span class="op">.</span>b_chars<span class="op">.</span>items)) <span class="op">|</span>ord<span class="op">|</span> <span class="cf">return</span> ord;</span>
+<span id="cb15-9"><a href="#cb15-9" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb15-10"><a href="#cb15-10" aria-hidden="true" tabindex="-1"></a>    <span class="cf">try</span> normalize<span class="op">.</span>makeNFD(<span class="va">self</span><span class="op">,</span> <span class="op">&amp;</span><span class="va">self</span><span class="op">.</span>a_chars);</span>
+<span id="cb15-11"><a href="#cb15-11" aria-hidden="true" tabindex="-1"></a>    <span class="cf">try</span> normalize<span class="op">.</span>makeNFD(<span class="va">self</span><span class="op">,</span> <span class="op">&amp;</span><span class="va">self</span><span class="op">.</span>b_chars);</span>
+<span id="cb15-12"><a href="#cb15-12" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb15-13"><a href="#cb15-13" aria-hidden="true" tabindex="-1"></a>    <span class="at">const</span> offset <span class="op">=</span> <span class="cf">try</span> prefix<span class="op">.</span>findOffset(<span class="va">self</span>); <span class="co">// Default 0</span></span>
+<span id="cb15-14"><a href="#cb15-14" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb15-15"><a href="#cb15-15" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Prefix trimming may reveal that one list is a prefix of the other</span></span>
+<span id="cb15-16"><a href="#cb15-16" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> (<span class="va">self</span><span class="op">.</span>a_chars<span class="op">.</span>items[offset<span class="op">..</span>]<span class="op">.</span>len <span class="op">==</span> <span class="dv">0</span> <span class="kw">or</span> <span class="va">self</span><span class="op">.</span>b_chars<span class="op">.</span>items[offset<span class="op">..</span>]<span class="op">.</span>len <span class="op">==</span> <span class="dv">0</span>) {</span>
+<span id="cb15-17"><a href="#cb15-17" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span> util<span class="op">.</span>cmp(<span class="dt">usize</span><span class="op">,</span> <span class="va">self</span><span class="op">.</span>a_chars<span class="op">.</span>items<span class="op">.</span>len<span class="op">,</span> <span class="va">self</span><span class="op">.</span>b_chars<span class="op">.</span>items<span class="op">.</span>len);</span>
+<span id="cb15-18"><a href="#cb15-18" aria-hidden="true" tabindex="-1"></a>    }</span>
+<span id="cb15-19"><a href="#cb15-19" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb15-20"><a href="#cb15-20" aria-hidden="true" tabindex="-1"></a>    <span class="cf">try</span> cea<span class="op">.</span>generateCEA(<span class="va">self</span><span class="op">,</span> offset<span class="op">,</span> <span class="cn">false</span>); <span class="co">// a</span></span>
+<span id="cb15-21"><a href="#cb15-21" aria-hidden="true" tabindex="-1"></a>    <span class="cf">try</span> cea<span class="op">.</span>generateCEA(<span class="va">self</span><span class="op">,</span> offset<span class="op">,</span> <span class="cn">true</span>); <span class="co">// b</span></span>
+<span id="cb15-22"><a href="#cb15-22" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb15-23"><a href="#cb15-23" aria-hidden="true" tabindex="-1"></a>    <span class="at">const</span> ord <span class="op">=</span> sort_key<span class="op">.</span>cmpIncremental(<span class="va">self</span><span class="op">.</span>a_cea<span class="op">.</span>items<span class="op">,</span> <span class="va">self</span><span class="op">.</span>b_cea<span class="op">.</span>items<span class="op">,</span> <span class="va">self</span><span class="op">.</span>shifting);</span>
+<span id="cb15-24"><a href="#cb15-24" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> (ord <span class="op">==</span> <span class="op">.</span>eq <span class="kw">and</span> <span class="va">self</span><span class="op">.</span>tiebreak) <span class="cf">return</span> util<span class="op">.</span>cmpArray(<span class="dt">u8</span><span class="op">,</span> a<span class="op">,</span> b);</span>
+<span id="cb15-25"><a href="#cb15-25" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb15-26"><a href="#cb15-26" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> ord;</span>
+<span id="cb15-27"><a href="#cb15-27" aria-hidden="true" tabindex="-1"></a>}</span></code></pre>
     </div>
+    <p>
+      This can be broken down into eight steps, some of them quite simple,
+      others horrifyingly complex:
+    </p>
+    <ol type="1">
+      <li>
+        <p>Handle edge cases (i.e., equal is equal and returns immediately).</p>
+      </li>
+      <li>
+        <p>
+          Ensure that the input strings are valid UTF-8 (applying fixes if
+          needed), and decode from bytes to Unicode scalar values.
+        </p>
+      </li>
+      <li>
+        <p>
+          See if a result can be reached by comparing ASCII-range characters in
+          the two strings; this is often not possible, but when it is, it saves
+          so much computation that it’s an indispensable code path.
+        </p>
+      </li>
+      <li>
+        <p>
+          If we need to continue with the UCA proper, begin by ensuring that
+          both strings have all their characters in the canonical decomposed
+          form, i.e.,
+          <a
+            href="https://en.wikipedia.org/wiki/Unicode_equivalence#Normalization"
+            >NFD</a
+          >.
+        </p>
+      </li>
+      <li>
+        <p>
+          Check if the two strings have a prefix in common that can safely be
+          ignored in collation. Doing this while conforming to the standard is
+          more difficult than it seems, for reasons that I may not even be able
+          to cover in this post. Prefix trimming can sometimes produce a
+          collation result on its own, if one string turns out to be a prefix of
+          the other.
+        </p>
+      </li>
+      <li>
+        <p>
+          Generate the <em>collation element array</em>. This process is by far
+          the most complex part of the UCA. It corresponds to the step shown
+          above (in a very basic case), where we looked up the collation weights
+          associated with each code point in each of the strings being compared.
+          There are many subtleties to consider here; I’ll get into it below.
+        </p>
+      </li>
+      <li>
+        <p>
+          Process the collation element arrays into <em>sort keys</em>, checking
+          one level at a time until a result is yielded. By this point, most of
+          the hard work has been done.
+        </p>
+      </li>
+      <li>
+        <p>
+          If the sort keys somehow came back identical, there is a final option
+          to use naïve comparison of the input strings as a tiebreaker.
+        </p>
+      </li>
+    </ol>
+    <p>
+      We can look at these steps one-by-one—at least, in those cases where
+      there’s anything worth saying. One fun part of implementing the UCA in Zig
+      was that I chose not to use any dependencies outside of the standard
+      library. So I dealt with problems like UTF-8 validation and decoding and
+      NFD normalization in my own code. I’ll show snippets of how these
+      components work. Still, the main focus will be on the core logic of the
+      UCA.
+    </p>
+    <p><em>To be continued…</em></p>
   </body>
 </html>

@@ -1,7 +1,7 @@
 ---
 title: "Unicode Collation for Dummies"
 author: "Theodore Beers"
-date: "14 July 2025"
+date: "August 2025"
 ---
 
 This post is meant as an introduction to the
@@ -22,7 +22,7 @@ collation._
 
 ## Introduction
 
-Given two strings of UTF-8-endoded text---let's say, for example, the names
+Given two strings of UTF-8-encoded text---let's say, for example, the names
 "Edgar" and "Frank"---it is trivial for a computer to determine which of them
 should come first alphabetically. If we look at a representation of those
 strings as arrays of byte values, we find that "Edgar" is (in hexadecimal)
@@ -36,6 +36,13 @@ before all the lowercase letters, so that, for example, "earnest" will sort
 after "Frank." But at least we have an alphabetical order of byte values within
 the uppercase and lowercase groups.
 
+```default
+Edgar
+Frank
+Zardoz
+earnest # Not ideal
+```
+
 Back to the larger problem: what happens if we add, say, "Élodie" to our list of
 names? A human will understand intuitively that E and É belong together as
 variants of the same letter---perhaps with the accented version to come after
@@ -45,79 +52,308 @@ representations in Unicode: either as a single character, `U+00C9`, for a Latin
 capital E with an acute accent; or as a combination of two characters, `U+0045`
 and `U+0301`, accounting for the base letter and the accent, respectively. (I
 wanted to bring up the "decomposed representation" as early as possible in this
-post, since it is the form that we generally want for Unicode sorting/collation.
+post, since it's the form that we generally want for Unicode sorting/collation.
 More on this later...)
 
 Both of these representations will break the naïve approach to sorting, in their
 own ways. `C9` as a byte value is greater than any in the ASCII/Basic Latin
-table, meaning that "Élodie" would sort after, say, "Zoë." Using the decomposed
-form seems promising---the first byte value is simply that of E, appropriate for
-sorting---but the combining accent character introduces new problems. `0x301` is
-too large to be represented in a single byte, so in UTF-8 it becomes `[CC, 81]`.
-"Élodie" in decomposed form is made up of seven code points, in eight bytes in
-the common encoding, where we perceive only six letters. It should be obvious
-how this would wreak havoc on a sorting algorithm that does nothing more than
-array comparison on the byte values.
+table, meaning that "Élodie" would sort after, say, "Zardoz." Using the
+decomposed form seems promising---the first byte value is simply that of E,
+appropriate for sorting---but the combining accent character introduces new
+problems. `0x301` is too large to be represented in a single byte, so in UTF-8
+it becomes `[CC, 81]`. "Élodie" in decomposed form is made up of seven code
+points, in eight bytes in the common encoding, where we perceive only six
+letters. It should be obvious how this would wreak havoc on a sorting algorithm
+that does nothing more than array comparison on the byte values.
 
-We need something better. Unicode is a large and complex system, and if we want
-a way of mapping code points to collation weights, it will have to be defined
-explicitly. That's where the Unicode Collation Algorithm comes in.
+```default
+Edgar
+Zardoz
+earnest
+Élodie  # Assuming form NFC
+```
+
+**We need something better.** Unicode is a large and complex system, and if we
+want a way of mapping code points to collation weights, it will have to be
+defined explicitly. That's where the Unicode Collation Algorithm comes in.
 
 ## Basic Idea
 
-_Some of what follows is oversimplification. If you are already familiar with
+_Some of what follows is oversimplification. If you're already familiar with
 this subject, please try to be charitable. I'll go into greater detail as the
 post progresses._
 
-The central concept of Unicode collation is that one character might belong or
-after another character on different bases. They may represent fundamentally
-different letters, like E and F; they may be different forms of something
-understood to be the "same" leter, like E and É; or they may be closer still,
-differing only in case, like E and e. Of course, languages and writing systems
-are extremely diverse, and not all of them even have a concept of uppercase vs.
-lowercase. But it turns out that allowing for a hierarchy of three (or sometimes
-four) levels of collation difference between code points is generally sufficient
-to get the job done. In a writing system like the Latin alphabet, these levels
-are indeed organized as I hinted above: the _primary_ level of collation
-distinguishes among different base letters; the _secondary_ level distinguishes
-among diacritics, like accents; and the _tertiary_ level accounts for case
-differences. If we assign to each code point in the Unicode tables a set of
-primary, secondary, and tertiary _collation weights_, we can then decide which
-of them sorts before the other by comparing their weights one level at a time.
-And this can be extrapolated to collate strings.
+The central concept of Unicode collation is that one character might belong
+before/after another character on different bases. They may represent
+fundamentally different letters, like E and F; they may be different forms of
+something understood to be the "same" letter, like E and É; or they may be
+closer still, differing only in case, like E and e. Of course, languages and
+writing systems are extremely diverse, and not all of them even have a concept
+of uppercase vs. lowercase. But it turns out that allowing for a hierarchy of
+three (or sometimes four) levels of collation difference between code points is
+generally sufficient to get the job done.
 
-Testing Zig syntax highlighting:
+In a writing system like the Latin alphabet, these levels are indeed organized
+as I hinted above: the _primary_ level of collation distinguishes among
+different base letters; the _secondary_ level distinguishes among diacritics,
+like accents; and the _tertiary_ level accounts for case differences. If we
+assign to each code point in the Unicode tables a set of primary, secondary, and
+tertiary _collation weights_, we can then decide which of them sorts before the
+other by comparing their weights one level at a time. And this can be
+extrapolated to collate entire strings.
+
+Let's look at some real examples from the **Default Unicode Collation Element
+Table** ([DUCET](https://www.unicode.org/Public/UCA/latest/allkeys.txt)), one of
+the standard documents that Unicode publishes in order to make this possible.
+NB, the following lines are not necessarily adjacent in the original; I'm
+pulling examples from different areas.
+
+```default
+0301  ; [.0000.0024.0002]                  # COMBINING ACUTE ACCENT
+0045  ; [.23E7.0020.0008]                  # LATIN CAPITAL LETTER E
+00C9  ; [.23E7.0020.0008][.0000.0024.0002] # LATIN CAPITAL LETTER E WITH ACUTE
+0058  ; [.2660.0020.0008]                  # LATIN CAPITAL LETTER X
+1D54F ; [.2660.0020.000B]                  # MATHEMATICAL DOUBLE-STRUCK CAPITAL X
+007A  ; [.2682.0020.0002]                  # LATIN SMALL LETTER Z
+0642  ; [.2AF9.0020.0002]                  # ARABIC LETTER QAF
+```
+
+What we find in each line is the code point; a semicolon separator; one or more
+_sets of weights_, each consisting of primary, secondary, and tertiary parts;
+and a comment giving the official name of the Unicode scalar value. _All
+numerical values are in hexadecimal._ We can look at one in greater detail:
+
+```default
+0058  ; [.2660.0020.0008] # LATIN CAPITAL LETTER X
+^         ^    ^    ^       ^
+cp        p    s    t       name
+```
+
+Hopefully you can see already where this is going. If we want to determine the
+proper lexicographical order of two characters---to take the simplest scenario
+possible---we can find their collation weights and compare them at the primary,
+then the secondary, then the tertiary level, returning as soon as we find a
+difference. Look, for example, at the respective weights of an ordinary capital
+letter X and the "mathematical double-struck capital X," i.e., the logo of the
+site formerly known as Twitter. They differ only at the tertiary level: both
+belong to the X family, and neither has a diacritic.
+
+```default
+0058  ; [.2660.0020.0008] # LATIN CAPITAL LETTER X
+1D54F ; [.2660.0020.000B] # MATHEMATICAL DOUBLE-STRUCK CAPITAL X
+```
+
+The reality of Unicode collation ends up being significantly more complex than
+this, but we can start on the happy path.
+
+## Simple but Real Examples
+
+### Élodie and Frank
+
+Armed with our fledgling understanding of how the Unicode Collation Algorithm
+works, let's return to the test case of placing the names "Élodie" and "Frank"
+in alphabetical order. We'll begin by representing them as arrays of code
+points, each of which has its assigned collation weights in the standard table.
+
+First, Élodie (note that we use the _decomposed_ form of É; this is a crucial
+part of the UCA):
+
+```default
+0045  ; [.23E7.0020.0008] # LATIN CAPITAL LETTER E
+0301  ; [.0000.0024.0002] # COMBINING ACUTE ACCENT
+006C  ; [.24BC.0020.0002] # LATIN SMALL LETTER L
+006F  ; [.252C.0020.0002] # LATIN SMALL LETTER O
+0064  ; [.23CA.0020.0002] # LATIN SMALL LETTER D
+0069  ; [.2473.0020.0002] # LATIN SMALL LETTER I
+0065  ; [.23E7.0020.0002] # LATIN SMALL LETTER E
+```
+
+Next, Frank:
+
+```default
+0046  ; [.2422.0020.0008] # LATIN CAPITAL LETTER F
+0072  ; [.2584.0020.0002] # LATIN SMALL LETTER R
+0061  ; [.2380.0020.0002] # LATIN SMALL LETTER A
+006E  ; [.2505.0020.0002] # LATIN SMALL LETTER N
+006B  ; [.24A8.0020.0002] # LATIN SMALL LETTER K
+```
+
+Since the first round of collation checking will be on the primary weights of
+these two words, we can pull those out and make a simpler array of primaries for
+each word, called a _sort key_.
+
+It's important to note that _only nonzero weights_ are considered here. As you
+can see, the "combining acute accent" character has no primary weight. We ignore
+that zero when constructing the sort key. This is necessary so that, for
+example, two words like "Maria" and "María," which differ only by an accent, are
+_identical_ at the primary level. Allowing a zero primary weight for an accent
+character to enter the sort key would immediately break collation. Anyway, our
+primary-level sort keys for "Élodie" and "Frank" are as follows:
+
+```default
+[23E7, 24BC, 252C, 23CA, 2473, 23E7] # Élodie
+[2422, 2584, 2380, 2505, 24A8]       # Frank
+```
+
+You don't have to be a genius to figure this out. We're back to straightforward
+array comparison, and we can reach a decision at index 0: "Élodie" belongs
+first.
+
+### Élodie and Elodie
+
+Now for a bit of a contrived example: what if we also had the name "Elodie"
+without the accent? How would collation proceed? We already know what the
+primary-level sort key would be for both words:
+
+```default
+[23E7, 24BC, 252C, 23CA, 2473, 23E7] # Élodie or Elodie (primary)
+```
+
+That is, comparison at the primary level would yield no difference. We then move
+to the secondary level, again building sort keys out of all nonzero weights:
+
+```default
+[0020, 0024, 0020, 0020, 0020, 0020, 0020] # Élodie (secondary)
+[0020, 0020, 0020, 0020, 0020, 0020]       # Elodie (secondary)
+```
+
+Now we see that "Élodie" has an extra element in its list of secondary weights,
+and it is higher than the others. We reach a decision at index 1 in the
+secondary sort key: "Elodie" (sans accent) belongs first.
+
+### Frank and frank
+
+For the sake of thoroughness, let's also consider two words that differ only in
+case, i.e., at the tertiary level. The name "Frank" and the common adjective
+"frank" will work nicely for this. We can add to the previous list of weights
+the values for lowercase f:
+
+```default
+0066  ; [.2422.0020.0002] # LATIN SMALL LETTER F
+0046  ; [.2422.0020.0008] # LATIN CAPITAL LETTER F
+0072  ; [.2584.0020.0002] # LATIN SMALL LETTER R
+0061  ; [.2380.0020.0002] # LATIN SMALL LETTER A
+006E  ; [.2505.0020.0002] # LATIN SMALL LETTER N
+006B  ; [.24A8.0020.0002] # LATIN SMALL LETTER K
+```
+
+The primary-level sort key will not yield a difference:
+
+```default
+[2422, 2584, 2380, 2505, 24A8] # Frank or frank (primary)
+```
+
+Nor will the secondary-level sort key:
+
+```default
+[0020, 0020, 0020, 0020, 0020] # Frank or frank (secondary)
+```
+
+But we finally have something at the tertiary level:
+
+```default
+[0008, 0002, 0002, 0002, 0002] # Frank (tertiary)
+[0002, 0002, 0002, 0002, 0002] # frank (tertiary)
+```
+
+At index 0 in the tertiary sort key, we see that "frank" belongs first.
+
+_This is a noteworthy difference between the Unicode Collation Algorithm and
+ASCII sorting: the order of the cases is reversed! An implementation of the UCA
+can of course make this configurable; it's trivial to set a flag and have
+comparisons reversed at the tertiary level. But the difference in default
+behavior is interesting nonetheless._
+
+## The Plot Thickens
+
+Some readers may like to stop here. I've given you enough of a primer that you
+could explain the general idea behind Unicode collation and how it works. You
+could even, with reference to a copy of `allkeys.txt` (i.e., the DUCET file),
+perform manual collation of one string against another. That should be more than
+enough to impress someone at a cocktail party.
+
+But I want to go on and show, in greater detail, what is actually involved in
+writing a conformant implementation of the UCA---i.e., an implementation that
+passes the punishingly rigorous
+[conformance tests](https://www.unicode.org/Public/UCA/latest/CollationTest.html)
+that are published alongside the technical standard. So if you're interested in
+digging deeper, feel free to stick around and keep reading.
+
+I think it will be helpful for most of the remainder of this post to be guided
+by the actual code of the collation routine that I wrote for my Zig library,
+[later](https://github.com/theodore-s-beers/later). This comes from
+`src/collator.zig`:
 
 ```zig
-test "sort multilingual list of names" {
-    const alloc = std.testing.allocator;
+pub fn collateFallible(self: *Collator, a: []const u8, b: []const u8) !std.math.Order {
+    if (std.mem.eql(u8, a, b)) return .eq;
 
-    var coll = try Collator.initDefault(alloc);
-    defer coll.deinit();
+    try decode.bytesToCodepoints(&self.a_chars, a);
+    try decode.bytesToCodepoints(&self.b_chars, b);
 
-    var input = [_][]const u8{
-        "چنگیز",
-        "Éloi",
-        "Ötzi",
-        "Melissa",
-        "صدام",
-        "Mélissa",
-        "Overton",
-        "Elrond",
-    };
+    // ASCII fast path
+    if (ascii.tryAscii(self.a_chars.items, self.b_chars.items)) |ord| return ord;
 
-    const expected = [_][]const u8{
-        "Éloi",
-        "Elrond",
-        "Melissa",
-        "Mélissa",
-        "Ötzi",
-        "Overton",
-        "چنگیز",
-        "صدام",
-    };
+    try normalize.makeNFD(self, &self.a_chars);
+    try normalize.makeNFD(self, &self.b_chars);
 
-    std.mem.sort([]const u8, &input, &coll, collateComparator);
-    try std.testing.expectEqualSlices([]const u8, &expected, &input);
+    const offset = try prefix.findOffset(self); // Default 0
+
+    // Prefix trimming may reveal that one list is a prefix of the other
+    if (self.a_chars.items[offset..].len == 0 or self.b_chars.items[offset..].len == 0) {
+        return util.cmp(usize, self.a_chars.items.len, self.b_chars.items.len);
+    }
+
+    try cea.generateCEA(self, offset, false); // a
+    try cea.generateCEA(self, offset, true); // b
+
+    const ord = sort_key.cmpIncremental(self.a_cea.items, self.b_cea.items, self.shifting);
+    if (ord == .eq and self.tiebreak) return util.cmpArray(u8, a, b);
+
+    return ord;
 }
 ```
+
+This can be broken down into eight steps, some of them quite simple, others
+horrifyingly complex:
+
+1. Handle edge cases (i.e., equal is equal and returns immediately).
+
+2. Ensure that the input strings are valid UTF-8 (applying fixes if needed), and
+   decode from bytes to Unicode scalar values.
+
+3. See if a result can be reached by comparing ASCII-range characters in the two
+   strings; this is often not possible, but when it is, it saves so much
+   computation that it's an indispensable code path.
+
+4. If we need to continue with the UCA proper, begin by ensuring that both
+   strings have all their characters in the canonical decomposed form, i.e.,
+   [NFD](https://en.wikipedia.org/wiki/Unicode_equivalence#Normalization).
+
+5. Check if the two strings have a prefix in common that can safely be ignored
+   in collation. Doing this while conforming to the standard is more difficult
+   than it seems, for reasons that I may not even be able to cover in this post.
+   Prefix trimming can sometimes produce a collation result on its own, if one
+   string turns out to be a prefix of the other.
+
+6. Generate the _collation element array_. This process is by far the most
+   complex part of the UCA. It corresponds to the step shown above (in a very
+   basic case), where we looked up the collation weights associated with each
+   code point in each of the strings being compared. There are many subtleties
+   to consider here; I'll get into it below.
+
+7. Process the collation element arrays into _sort keys_, checking one level at
+   a time until a result is yielded. By this point, most of the hard work has
+   been done.
+
+8. If the sort keys somehow came back identical, there is a final option to use
+   naïve comparison of the input strings as a tiebreaker.
+
+We can look at these steps one-by-one---at least, in those cases where there's
+anything worth saying. One fun part of implementing the UCA in Zig was that I
+chose not to use any dependencies outside of the standard library. So I dealt
+with problems like UTF-8 validation and decoding and NFD normalization in my own
+code. I'll show snippets of how these components work. Still, the main focus
+will be on the core logic of the UCA.
+
+_To be continued..._
