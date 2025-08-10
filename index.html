@@ -685,6 +685,83 @@
       components work. Still, the main focus will be on the core logic of the
       UCA.
     </p>
+    <h2 id="from-utf-8-to-code-points">From UTF-8 to Code Points</h2>
+    <p>
+      I don’t have a lot to say here, since UTF-8 validation/decoding is a
+      well-understood problem with many solutions available in the public
+      domain. The one that I chose to adapt to Zig, however, is probably one of
+      the most elegant pieces of code I’ve ever seen. It’s a famous UTF-8
+      decoder written in C by Björn Höhrmann, subsequently improved by Rich
+      Felker (creator/maintainer of musl).
+    </p>
+    <p>
+      This decoder is based on a deterministic finite automaton, i.e. a state
+      machine, wherein each byte of UTF-8 that is encountered causes a certain
+      state transition. There is a “home state,” or an “accept state,” which is
+      reached each time that a full code point has been processed. This can
+      happen, of course, after anything from one to four bytes.
+    </p>
+    <p>
+      Any invalid sequence brings the DFA into a “reject state,” which is
+      normally handled by having the decoder emit the “Unicode replacement
+      character,” <code>U+FFFD</code>. What I find brilliant, though, is that
+      validation of UTF-8 sequences is accomplished hand-in-hand with
+      determining the code points. That is, each time that the DFA reaches the
+      “accept state,” the function also has access to the value of the code
+      point that has just been completed. For a case like Unicode normalization,
+      this is perfect: what we want for the algorithm is a list of code points
+      in <code>u32</code> (or <code>u21</code>, but you get the idea). Below you
+      can see what I mean; I’ve added some comments for clarity.
+    </p>
+    <div class="sourceCode" id="cb16">
+      <pre
+        class="sourceCode zig"
+      ><code class="sourceCode zig"><span id="cb16-1"><a href="#cb16-1" aria-hidden="true" tabindex="-1"></a><span class="kw">pub</span> <span class="kw">fn</span> bytesToCodepoints(codepoints<span class="op">:</span> <span class="op">*</span>std<span class="op">.</span>ArrayList(<span class="dt">u32</span>)<span class="op">,</span> input<span class="op">:</span> []<span class="at">const</span> <span class="dt">u8</span>) <span class="op">!</span><span class="dt">void</span> {</span>
+<span id="cb16-2"><a href="#cb16-2" aria-hidden="true" tabindex="-1"></a>   <span class="co">// For performance reasons, we keep reusing a list of code points</span></span>
+<span id="cb16-3"><a href="#cb16-3" aria-hidden="true" tabindex="-1"></a>   codepoints<span class="op">.</span>clearRetainingCapacity();</span>
+<span id="cb16-4"><a href="#cb16-4" aria-hidden="true" tabindex="-1"></a>   <span class="cf">try</span> codepoints<span class="op">.</span>ensureTotalCapacity(input<span class="op">.</span>len);</span>
+<span id="cb16-5"><a href="#cb16-5" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb16-6"><a href="#cb16-6" aria-hidden="true" tabindex="-1"></a>   <span class="co">// Start with the &quot;accept state&quot; and 0 code point value</span></span>
+<span id="cb16-7"><a href="#cb16-7" aria-hidden="true" tabindex="-1"></a>   <span class="at">var</span> state<span class="op">:</span> <span class="dt">u8</span> <span class="op">=</span> UTF8_ACCEPT;</span>
+<span id="cb16-8"><a href="#cb16-8" aria-hidden="true" tabindex="-1"></a>   <span class="at">var</span> codepoint<span class="op">:</span> <span class="dt">u32</span> <span class="op">=</span> <span class="dv">0</span>;</span>
+<span id="cb16-9"><a href="#cb16-9" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb16-10"><a href="#cb16-10" aria-hidden="true" tabindex="-1"></a>   <span class="co">// Iterate over bytes of the string</span></span>
+<span id="cb16-11"><a href="#cb16-11" aria-hidden="true" tabindex="-1"></a>   <span class="cf">for</span> (input) <span class="op">|</span>b<span class="op">|</span> {</span>
+<span id="cb16-12"><a href="#cb16-12" aria-hidden="true" tabindex="-1"></a>      <span class="co">// Get the next state and updated code point value</span></span>
+<span id="cb16-13"><a href="#cb16-13" aria-hidden="true" tabindex="-1"></a>      <span class="at">const</span> new_state <span class="op">=</span> decode(<span class="op">&amp;</span>state<span class="op">,</span> <span class="op">&amp;</span>codepoint<span class="op">,</span> b);</span>
+<span id="cb16-14"><a href="#cb16-14" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb16-15"><a href="#cb16-15" aria-hidden="true" tabindex="-1"></a>      <span class="co">// If we reached an &quot;end state,&quot; handle it</span></span>
+<span id="cb16-16"><a href="#cb16-16" aria-hidden="true" tabindex="-1"></a>      <span class="cf">if</span> (new_state <span class="op">==</span> UTF8_REJECT) {</span>
+<span id="cb16-17"><a href="#cb16-17" aria-hidden="true" tabindex="-1"></a>         codepoints<span class="op">.</span>appendAssumeCapacity(REPLACEMENT);</span>
+<span id="cb16-18"><a href="#cb16-18" aria-hidden="true" tabindex="-1"></a>         state <span class="op">=</span> UTF8_ACCEPT;</span>
+<span id="cb16-19"><a href="#cb16-19" aria-hidden="true" tabindex="-1"></a>      } <span class="cf">else</span> <span class="cf">if</span> (new_state <span class="op">==</span> UTF8_ACCEPT) {</span>
+<span id="cb16-20"><a href="#cb16-20" aria-hidden="true" tabindex="-1"></a>         codepoints<span class="op">.</span>appendAssumeCapacity(codepoint);</span>
+<span id="cb16-21"><a href="#cb16-21" aria-hidden="true" tabindex="-1"></a>      }</span>
+<span id="cb16-22"><a href="#cb16-22" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb16-23"><a href="#cb16-23" aria-hidden="true" tabindex="-1"></a>      <span class="co">// Otherwise continue to the next byte (of a multi-byte character)</span></span>
+<span id="cb16-24"><a href="#cb16-24" aria-hidden="true" tabindex="-1"></a>   }</span>
+<span id="cb16-25"><a href="#cb16-25" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb16-26"><a href="#cb16-26" aria-hidden="true" tabindex="-1"></a>   <span class="co">// If we ended in an incomplete sequence, emit replacement</span></span>
+<span id="cb16-27"><a href="#cb16-27" aria-hidden="true" tabindex="-1"></a>   <span class="cf">if</span> (state <span class="op">!=</span> UTF8_ACCEPT) codepoints<span class="op">.</span>appendAssumeCapacity(REPLACEMENT);</span>
+<span id="cb16-28"><a href="#cb16-28" aria-hidden="true" tabindex="-1"></a>}</span></code></pre>
+    </div>
+    <p>
+      I’ve left out the <code>decode</code> function, but you can look into this
+      further if you’re curious and haven’t seen an implementation of this style
+      of UTF-8 decoder before. The basic idea is that each byte from the input
+      string is treated as an index into a table in order to compute the next
+      state and value of the code point variable.
+    </p>
+    <p>
+      Fortunately, this is also quite performant! It’s <em>not</em> the fastest
+      possible approach. Daniel Lemire has written a few blog posts (<a
+        href="https://lemire.me/blog/2018/05/09/how-quickly-can-you-check-that-a-string-is-valid-unicode-utf-8/"
+        >example</a
+      >), and at least one academic paper, on the subject of maximizing
+      performance in UTF-8 validation/decoding. But Höhrmann’s decoder continues
+      to be popular because it’s good enough, easy to understand, and elegant.
+      Everyone should give it a try at some point.
+    </p>
     <p><em>To be continued…</em></p>
   </body>
 </html>

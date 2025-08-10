@@ -356,4 +356,73 @@ with problems like UTF-8 validation and decoding and NFD normalization in my own
 code. I'll show snippets of how these components work. Still, the main focus
 will be on the core logic of the UCA.
 
+## From UTF-8 to Code Points
+
+I don't have a lot to say here, since UTF-8 validation/decoding is a
+well-understood problem with many solutions available in the public domain. The
+one that I chose to adapt to Zig, however, is probably one of the most elegant
+pieces of code I've ever seen. It's a famous UTF-8 decoder written in C by Björn
+Höhrmann, subsequently improved by Rich Felker (creator/maintainer of musl).
+
+This decoder is based on a deterministic finite automaton, i.e. a state machine,
+wherein each byte of UTF-8 that is encountered causes a certain state
+transition. There is a "home state," or an "accept state," which is reached each
+time that a full code point has been processed. This can happen, of course,
+after anything from one to four bytes.
+
+Any invalid sequence brings the DFA into a "reject state," which is normally
+handled by having the decoder emit the "Unicode replacement character,"
+`U+FFFD`. What I find brilliant, though, is that validation of UTF-8 sequences
+is accomplished hand-in-hand with determining the code points. That is, each
+time that the DFA reaches the "accept state," the function also has access to
+the value of the code point that has just been completed. For a case like
+Unicode normalization, this is perfect: what we want for the algorithm is a list
+of code points in `u32` (or `u21`, but you get the idea). Below you can see what
+I mean; I've added some comments for clarity.
+
+```zig
+pub fn bytesToCodepoints(codepoints: *std.ArrayList(u32), input: []const u8) !void {
+   // For performance reasons, we keep reusing a list of code points
+   codepoints.clearRetainingCapacity();
+   try codepoints.ensureTotalCapacity(input.len);
+
+   // Start with the "accept state" and 0 code point value
+   var state: u8 = UTF8_ACCEPT;
+   var codepoint: u32 = 0;
+
+   // Iterate over bytes of the string
+   for (input) |b| {
+      // Get the next state and updated code point value
+      const new_state = decode(&state, &codepoint, b);
+
+      // If we reached an "end state," handle it
+      if (new_state == UTF8_REJECT) {
+         codepoints.appendAssumeCapacity(REPLACEMENT);
+         state = UTF8_ACCEPT;
+      } else if (new_state == UTF8_ACCEPT) {
+         codepoints.appendAssumeCapacity(codepoint);
+      }
+
+      // Otherwise continue to the next byte (of a multi-byte character)
+   }
+
+   // If we ended in an incomplete sequence, emit replacement
+   if (state != UTF8_ACCEPT) codepoints.appendAssumeCapacity(REPLACEMENT);
+}
+```
+
+I've left out the `decode` function, but you can look into this further if
+you're curious and haven't seen an implementation of this style of UTF-8 decoder
+before. The basic idea is that each byte from the input string is treated as an
+index into a table in order to compute the next state and value of the code
+point variable.
+
+Fortunately, this is also quite performant! It's _not_ the fastest possible
+approach. Daniel Lemire has written a few blog posts
+([example](https://lemire.me/blog/2018/05/09/how-quickly-can-you-check-that-a-string-is-valid-unicode-utf-8/)),
+and at least one academic paper, on the subject of maximizing performance in
+UTF-8 validation/decoding. But Höhrmann's decoder continues to be popular
+because it's good enough, easy to understand, and elegant. Everyone should give
+it a try at some point.
+
 _To be continued..._
