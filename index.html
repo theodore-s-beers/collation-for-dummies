@@ -1073,6 +1073,57 @@
       sequences, fear not—we’ll return to this issue in discussing the
       construction of collation element arrays. May the gods help us.
     </p>
+    <h3 id="variable-weights">Variable Weights</h3>
+    <p>
+      Here we have an even more outside-the-box concept: there are certain
+      characters that one might prefer to ignore in collation (at least at the
+      main levels). These include whitespace characters, punctuation, and some
+      symbols. Take the following example:
+    </p>
+    <div class="sourceCode" id="cb23">
+      <pre
+        class="sourceCode default"
+      ><code class="sourceCode default"><span id="cb23-1"><a href="#cb23-1" aria-hidden="true" tabindex="-1"></a>foo baz</span>
+<span id="cb23-2"><a href="#cb23-2" aria-hidden="true" tabindex="-1"></a>foobar</span>
+<span id="cb23-3"><a href="#cb23-3" aria-hidden="true" tabindex="-1"></a>foobaz</span></code></pre>
+    </div>
+    <p>
+      Does that look wrong to you? It may not; treating the space as an ordinary
+      character for collation purposes is one valid, common approach. But a user
+      might prefer to ignore the space at the primary, secondary, and tertiary
+      levels, so that “foo baz” and “foobaz” would be grouped together,
+      differing only at a <em>quaternary</em> level. This is known in the UCA as
+      the “shifted” approach, and it is made possible by the assigning of
+      <em>variable weights</em> to the relevant code points in the tables.
+    </p>
+    <div class="sourceCode" id="cb24">
+      <pre
+        class="sourceCode default"
+      ><code class="sourceCode default"><span id="cb24-1"><a href="#cb24-1" aria-hidden="true" tabindex="-1"></a>foobar</span>
+<span id="cb24-2"><a href="#cb24-2" aria-hidden="true" tabindex="-1"></a>foo baz</span>
+<span id="cb24-3"><a href="#cb24-3" aria-hidden="true" tabindex="-1"></a>foobaz</span></code></pre>
+    </div>
+    <p>
+      If you look in the tables for a character like <code>U+0020</code>, the
+      normal space, you will see that the set of weights has a star at the
+      beginning instead of a period. This marks it as variable.
+    </p>
+    <div class="sourceCode" id="cb25">
+      <pre
+        class="sourceCode default"
+      ><code class="sourceCode default"><span id="cb25-1"><a href="#cb25-1" aria-hidden="true" tabindex="-1"></a>0020  ; [*0209.0020.0002] # SPACE</span></code></pre>
+    </div>
+    <p>
+      A conformant implementation of the UCA needs to be able to handle
+      variable-weight characters according to either the “non-ignorable” or the
+      “shifted” approach. There are, in fact, separate conformance tests for
+      them. I’ll come back to this issue later. For the moment, all that we need
+      to understand is that, when variable weights are being shifted, it has
+      some subtle effects on the treatment of surrounding characters. This is
+      why we cannot safely trim a shared prefix from two strings if the
+      “shifted” approach is specified and the final code point in the prefix has
+      variable weights.
+    </p>
     <p><em>To be continued…</em></p>
   </body>
 </html>

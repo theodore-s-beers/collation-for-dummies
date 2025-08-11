@@ -701,4 +701,48 @@ If you want to learn more about the treatment of multi-code-point sequences,
 fear not---we'll return to this issue in discussing the construction of
 collation element arrays. May the gods help us.
 
+### Variable Weights
+
+Here we have an even more outside-the-box concept: there are certain characters
+that one might prefer to ignore in collation (at least at the main levels).
+These include whitespace characters, punctuation, and some symbols. Take the
+following example:
+
+```default
+foo baz
+foobar
+foobaz
+```
+
+Does that look wrong to you? It may not; treating the space as an ordinary
+character for collation purposes is one valid, common approach. But a user might
+prefer to ignore the space at the primary, secondary, and tertiary levels, so
+that "foo baz" and "foobaz" would be grouped together, differing only at a
+_quaternary_ level. This is known in the UCA as the "shifted" approach, and it
+is made possible by the assigning of _variable weights_ to the relevant code
+points in the tables.
+
+```default
+foobar
+foo baz
+foobaz
+```
+
+If you look in the tables for a character like `U+0020`, the normal space, you
+will see that the set of weights has a star at the beginning instead of a
+period. This marks it as variable.
+
+```default
+0020  ; [*0209.0020.0002] # SPACE
+```
+
+A conformant implementation of the UCA needs to be able to handle
+variable-weight characters according to either the "non-ignorable" or the
+"shifted" approach. There are, in fact, separate conformance tests for them.
+I'll come back to this issue later. For the moment, all that we need to
+understand is that, when variable weights are being shifted, it has some subtle
+effects on the treatment of surrounding characters. This is why we cannot safely
+trim a shared prefix from two strings if the "shifted" approach is specified and
+the final code point in the prefix has variable weights.
+
 _To be continued..._
