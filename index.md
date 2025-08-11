@@ -604,4 +604,65 @@ while benchmarking my UCA implementation, that looking up combining classes is
 one of the hottest paths in the entire library. It demands a special degree of
 optimization, which is an interesting problem but beyond the scope of this post.
 
+## Prefix Trimming
+
+This sounds like it should be one of the simplest steps in the collation
+process. By this point, we know that the two strings being compared are not
+equal, and that a collation decision cannot be reached by looking at ASCII-range
+characters at the beginning of each string. And both have been set in form NFD
+(or close enough, via FCD). Now we can just trim whatever common prefix exists
+in the two lists of code points, n'est-ce pas? Almost, but there are a few
+subtleties of Unicode collation that can trip us up.
+
+Let's have a look at my `findOffset` function. Note that, for performance
+reasons, it's better to avoid actually removing any shared prefix code points
+from the two lists. We instead find the appropriate offset and _ignore_ the
+prefix. I've added comments to the following code for clarity; even so, it will
+need some explanation. This is from `src/prefix.zig`:
+
+```zig
+pub fn findOffset(coll: *Collator) !usize {
+   const a = coll.a_chars.items;
+   const b = coll.b_chars.items;
+   var offset: usize = 0;
+
+   while (offset < @min(a.len, b.len)) : (offset += 1) {
+      // Obviously, we stop incrementing the offset once the lists differ
+      if (a[offset] != b[offset]) break;
+
+      // If we reach a character that could begin a multi-code-point sequence
+      // in the collation tables, we also stop
+      if (std.mem.indexOfScalar(u32, &consts.NEED_TWO, a[offset])) |_| break;
+      if (std.mem.indexOfScalar(u32, &consts.NEED_THREE, a[offset])) |_| break;
+   }
+
+   if (offset == 0) return 0;
+
+   // If we're using the "shifted" approach to variable-weight characters,
+   // and the last character in the prefix is one such, we have a problem
+   if (coll.shifting and try coll.getVariable(a[offset - 1])) {
+      // We can try walking the offset back by one
+      if (offset > 1) {
+         if (try coll.getVariable(a[offset - 2])) return 0;
+         return offset - 1;
+      }
+
+      // On rare occasions (i.e., in the conformance tests), this might fail
+      // the entire prefix function
+      return 0;
+   }
+
+   return offset;
+}
+```
+
+I'm sure that neither of the problem scenarios makes any sense right now, but
+I'll explain what's going on. You can see already that we have to keep an eye
+out for two things in the prefix code points: characters that may begin
+multi-code-point sequences in the collation tables (and therefore cannot safely
+be severed from the characters that follow them); and, depending on the
+configuration of the collator, characters that have _variable weights_. To be
+clear, these are all relatively uncommon scenarios. But the conformance tests
+will not pass with anything less than exactitude.
+
 _To be continued..._

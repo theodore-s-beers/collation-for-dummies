@@ -963,6 +963,73 @@
       paths in the entire library. It demands a special degree of optimization,
       which is an interesting problem but beyond the scope of this post.
     </p>
+    <h2 id="prefix-trimming">Prefix Trimming</h2>
+    <p>
+      This sounds like it should be one of the simplest steps in the collation
+      process. By this point, we know that the two strings being compared are
+      not equal, and that a collation decision cannot be reached by looking at
+      ASCII-range characters at the beginning of each string. And both have been
+      set in form NFD (or close enough, via FCD). Now we can just trim whatever
+      common prefix exists in the two lists of code points, n’est-ce pas?
+      Almost, but there are a few subtleties of Unicode collation that can trip
+      us up.
+    </p>
+    <p>
+      Let’s have a look at my <code>findOffset</code> function. Note that, for
+      performance reasons, it’s better to avoid actually removing any shared
+      prefix code points from the two lists. We instead find the appropriate
+      offset and <em>ignore</em> the prefix. I’ve added comments to the
+      following code for clarity; even so, it will need some explanation. This
+      is from <code>src/prefix.zig</code>:
+    </p>
+    <div class="sourceCode" id="cb21">
+      <pre
+        class="sourceCode zig"
+      ><code class="sourceCode zig"><span id="cb21-1"><a href="#cb21-1" aria-hidden="true" tabindex="-1"></a><span class="kw">pub</span> <span class="kw">fn</span> findOffset(coll<span class="op">:</span> <span class="op">*</span>Collator) <span class="op">!</span><span class="dt">usize</span> {</span>
+<span id="cb21-2"><a href="#cb21-2" aria-hidden="true" tabindex="-1"></a>   <span class="at">const</span> a <span class="op">=</span> coll<span class="op">.</span>a_chars<span class="op">.</span>items;</span>
+<span id="cb21-3"><a href="#cb21-3" aria-hidden="true" tabindex="-1"></a>   <span class="at">const</span> b <span class="op">=</span> coll<span class="op">.</span>b_chars<span class="op">.</span>items;</span>
+<span id="cb21-4"><a href="#cb21-4" aria-hidden="true" tabindex="-1"></a>   <span class="at">var</span> offset<span class="op">:</span> <span class="dt">usize</span> <span class="op">=</span> <span class="dv">0</span>;</span>
+<span id="cb21-5"><a href="#cb21-5" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb21-6"><a href="#cb21-6" aria-hidden="true" tabindex="-1"></a>   <span class="cf">while</span> (offset <span class="op">&lt;</span> <span class="bu">@min</span>(a<span class="op">.</span>len<span class="op">,</span> b<span class="op">.</span>len)) <span class="op">:</span> (offset <span class="op">+=</span> <span class="dv">1</span>) {</span>
+<span id="cb21-7"><a href="#cb21-7" aria-hidden="true" tabindex="-1"></a>      <span class="co">// Obviously, we stop incrementing the offset once the lists differ</span></span>
+<span id="cb21-8"><a href="#cb21-8" aria-hidden="true" tabindex="-1"></a>      <span class="cf">if</span> (a[offset] <span class="op">!=</span> b[offset]) <span class="cf">break</span>;</span>
+<span id="cb21-9"><a href="#cb21-9" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb21-10"><a href="#cb21-10" aria-hidden="true" tabindex="-1"></a>      <span class="co">// If we reach a character that could begin a multi-code-point sequence</span></span>
+<span id="cb21-11"><a href="#cb21-11" aria-hidden="true" tabindex="-1"></a>      <span class="co">// in the collation tables, we also stop</span></span>
+<span id="cb21-12"><a href="#cb21-12" aria-hidden="true" tabindex="-1"></a>      <span class="cf">if</span> (std<span class="op">.</span>mem<span class="op">.</span>indexOfScalar(<span class="dt">u32</span><span class="op">,</span> <span class="op">&amp;</span>consts<span class="op">.</span>NEED_TWO<span class="op">,</span> a[offset])) <span class="op">|</span>_<span class="op">|</span> <span class="cf">break</span>;</span>
+<span id="cb21-13"><a href="#cb21-13" aria-hidden="true" tabindex="-1"></a>      <span class="cf">if</span> (std<span class="op">.</span>mem<span class="op">.</span>indexOfScalar(<span class="dt">u32</span><span class="op">,</span> <span class="op">&amp;</span>consts<span class="op">.</span>NEED_THREE<span class="op">,</span> a[offset])) <span class="op">|</span>_<span class="op">|</span> <span class="cf">break</span>;</span>
+<span id="cb21-14"><a href="#cb21-14" aria-hidden="true" tabindex="-1"></a>   }</span>
+<span id="cb21-15"><a href="#cb21-15" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb21-16"><a href="#cb21-16" aria-hidden="true" tabindex="-1"></a>   <span class="cf">if</span> (offset <span class="op">==</span> <span class="dv">0</span>) <span class="cf">return</span> <span class="dv">0</span>;</span>
+<span id="cb21-17"><a href="#cb21-17" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb21-18"><a href="#cb21-18" aria-hidden="true" tabindex="-1"></a>   <span class="co">// If we&#39;re using the &quot;shifted&quot; approach to variable-weight characters,</span></span>
+<span id="cb21-19"><a href="#cb21-19" aria-hidden="true" tabindex="-1"></a>   <span class="co">// and the last character in the prefix is one such, we have a problem</span></span>
+<span id="cb21-20"><a href="#cb21-20" aria-hidden="true" tabindex="-1"></a>   <span class="cf">if</span> (coll<span class="op">.</span>shifting <span class="kw">and</span> <span class="cf">try</span> coll<span class="op">.</span>getVariable(a[offset <span class="op">-</span> <span class="dv">1</span>])) {</span>
+<span id="cb21-21"><a href="#cb21-21" aria-hidden="true" tabindex="-1"></a>      <span class="co">// We can try walking the offset back by one</span></span>
+<span id="cb21-22"><a href="#cb21-22" aria-hidden="true" tabindex="-1"></a>      <span class="cf">if</span> (offset <span class="op">&gt;</span> <span class="dv">1</span>) {</span>
+<span id="cb21-23"><a href="#cb21-23" aria-hidden="true" tabindex="-1"></a>         <span class="cf">if</span> (<span class="cf">try</span> coll<span class="op">.</span>getVariable(a[offset <span class="op">-</span> <span class="dv">2</span>])) <span class="cf">return</span> <span class="dv">0</span>;</span>
+<span id="cb21-24"><a href="#cb21-24" aria-hidden="true" tabindex="-1"></a>         <span class="cf">return</span> offset <span class="op">-</span> <span class="dv">1</span>;</span>
+<span id="cb21-25"><a href="#cb21-25" aria-hidden="true" tabindex="-1"></a>      }</span>
+<span id="cb21-26"><a href="#cb21-26" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb21-27"><a href="#cb21-27" aria-hidden="true" tabindex="-1"></a>      <span class="co">// On rare occasions (i.e., in the conformance tests), this might fail</span></span>
+<span id="cb21-28"><a href="#cb21-28" aria-hidden="true" tabindex="-1"></a>      <span class="co">// the entire prefix function</span></span>
+<span id="cb21-29"><a href="#cb21-29" aria-hidden="true" tabindex="-1"></a>      <span class="cf">return</span> <span class="dv">0</span>;</span>
+<span id="cb21-30"><a href="#cb21-30" aria-hidden="true" tabindex="-1"></a>   }</span>
+<span id="cb21-31"><a href="#cb21-31" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb21-32"><a href="#cb21-32" aria-hidden="true" tabindex="-1"></a>   <span class="cf">return</span> offset;</span>
+<span id="cb21-33"><a href="#cb21-33" aria-hidden="true" tabindex="-1"></a>}</span></code></pre>
+    </div>
+    <p>
+      I’m sure that neither of the problem scenarios makes any sense right now,
+      but I’ll explain what’s going on. You can see already that we have to keep
+      an eye out for two things in the prefix code points: characters that may
+      begin multi-code-point sequences in the collation tables (and therefore
+      cannot safely be severed from the characters that follow them); and,
+      depending on the configuration of the collator, characters that have
+      <em>variable weights</em>. To be clear, these are all relatively uncommon
+      scenarios. But the conformance tests will not pass with anything less than
+      exactitude.
+    </p>
     <p><em>To be continued…</em></p>
   </body>
 </html>
