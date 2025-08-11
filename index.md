@@ -425,4 +425,103 @@ UTF-8 validation/decoding. But Höhrmann's decoder continues to be popular
 because it's good enough, easy to understand, and elegant. Everyone should give
 it a try at some point.
 
+## NFD Normalization
+
+As I mentioned earlier, Unicode collation requires that the characters in each
+string be _decomposed_ and _in canonical order_. This means that any code point
+that is considered (per the Unicode standard) to be a composition of multiple
+other, lower-level code points must be broken down into those. I gave a simple
+example: "É," the Latin-script capital E with an acute accent. This letter can
+be, and most often is, represented by the single code point `U+00C9`. In fact,
+the overwhelming majority of digital text that we encounter these days is in the
+UTF-8 encoding and in form NFC, i.e., with characters _composed_ into shorter
+representations where possible, and upholding _canonical equivalence_. (That is,
+characters that are considered equivalent are guaranteed to be represented the
+same way in form NFC.)
+
+Back to "É," though: it can also be represented via two code points, `U+0045`
+for the capital letter E, and `U+0301` for the combining acute accent. This is
+another canonical Unicode form, called NFD. I'm sure you get the idea, at least
+in a basic sense. Whereas NFC has composed characters, NFD has them decomposed
+and with the constituent parts in a standard order. You can perhaps also
+understand how this is helpful---necessary, in fact---for proper sorting.
+Breaking down "É" into "E followed by an acute accent" is what allowed us to
+derive identical sort keys for "Élodie" and "Elodie" at the primary level, and
+for the accent to make the collation decision between the two words at just the
+right spot (i.e., just after the initial letter/index).
+
+I worry this discussion could become dense, but on some level it should be
+straightforward enough. We deal with mostly NFC text data in the wild, and we
+need to convert to NFD to apply the Unicode Collation Algorithm. How can we do
+that? It ends up being one of those problems that teaches you a lot about the
+Unicode standard if you want to write your own implementation. This is because
+you need to be able to determine, for any code point, what its canonical
+decomposition is (if any); and how those decomposed parts must be ordered. I
+tried to keep this understandable in my code, with a high-level function that
+goes through the different steps of the NFD conversion process:
+
+```zig
+pub fn makeNFD(coll: *Collator, input: *std.ArrayList(u32)) !void {
+   if (try fcd(coll, input.items)) return;
+
+   try decompose(coll, input);
+   reorder(input.items);
+}
+```
+
+As you can see, we have a short `makeNFD` function that does three things.
+First, it checks whether the input meets certain criteria that obviate the need
+for any decomposition. (FCD is short for "fast NFC/NFD.") We can set aside the
+details of this part for the time being. Second, in case NFD conversion _is_
+needed, we decompose the input code points. Finally, we ensure that the
+decomposed code points are in their canonical ordering.
+
+Sounds easy, doesn't it? But let's have a look at the `decompose` function. I've
+added comments for clarity.
+
+```zig
+fn decompose(coll: *Collator, input: *std.ArrayList(u32)) !void {
+   var i: usize = 0;
+
+   // We need to manage i manually in this loop
+   while (i < input.items.len) {
+      const code_point = input.items[i];
+
+      // Code points below a certain value never require decomposition
+      if (code_point < 0xC0) {
+         i += 1;
+         continue;
+      }
+
+      // Certain Korean text requires special handling; don't ask
+      if (0xAC00 <= code_point and code_point <= 0xD7A3) {
+         const len, const arr = decomposeJamo(code_point);
+         try input.replaceRange(i, 1, arr[0..len]);
+
+         i += len;
+         continue;
+      }
+
+      // If a canonical decomposition exists for this code point, apply it
+      if (try coll.getDecomp(code_point)) |decomp| {
+         try input.replaceRange(i, 1, decomp);
+         i += decomp.len;
+         continue;
+      }
+
+      i += 1;
+   }
+}
+```
+
+The only trick here, apart from the weird Korean stuff, is that we need an
+efficient way of fetching the canonical decomposition (if any) of a given code
+point. I did this in a naïve but functional way, by building a hash table from
+Unicode data. All that my `getDecomp` function does is to check in that table.
+(The crazier part is that is that I have a bunch of data structures like this
+that are derived from Unicode data, and for performance reasons I have them
+serialized in binary formats. These maps are in some cases large, up to a few
+hundred KiB on disk, but they can be loaded rapidly at runtime, and a given
+collator instance needs to do so only once.)
+
 _To be continued..._

@@ -762,6 +762,117 @@
       to be popular because it’s good enough, easy to understand, and elegant.
       Everyone should give it a try at some point.
     </p>
+    <h2 id="nfd-normalization">NFD Normalization</h2>
+    <p>
+      As I mentioned earlier, Unicode collation requires that the characters in
+      each string be <em>decomposed</em> and <em>in canonical order</em>. This
+      means that any code point that is considered (per the Unicode standard) to
+      be a composition of multiple other, lower-level code points must be broken
+      down into those. I gave a simple example: “É,” the Latin-script capital E
+      with an acute accent. This letter can be, and most often is, represented
+      by the single code point <code>U+00C9</code>. In fact, the overwhelming
+      majority of digital text that we encounter these days is in the UTF-8
+      encoding and in form NFC, i.e., with characters <em>composed</em> into
+      shorter representations where possible, and upholding
+      <em>canonical equivalence</em>. (That is, characters that are considered
+      equivalent are guaranteed to be represented the same way in form NFC.)
+    </p>
+    <p>
+      Back to “É,” though: it can also be represented via two code points,
+      <code>U+0045</code> for the capital letter E, and <code>U+0301</code> for
+      the combining acute accent. This is another canonical Unicode form, called
+      NFD. I’m sure you get the idea, at least in a basic sense. Whereas NFC has
+      composed characters, NFD has them decomposed and with the constituent
+      parts in a standard order. You can perhaps also understand how this is
+      helpful—necessary, in fact—for proper sorting. Breaking down “É” into “E
+      followed by an acute accent” is what allowed us to derive identical sort
+      keys for “Élodie” and “Elodie” at the primary level, and for the accent to
+      make the collation decision between the two words at just the right spot
+      (i.e., just after the initial letter/index).
+    </p>
+    <p>
+      I worry this discussion could become dense, but on some level it should be
+      straightforward enough. We deal with mostly NFC text data in the wild, and
+      we need to convert to NFD to apply the Unicode Collation Algorithm. How
+      can we do that? It ends up being one of those problems that teaches you a
+      lot about the Unicode standard if you want to write your own
+      implementation. This is because you need to be able to determine, for any
+      code point, what its canonical decomposition is (if any); and how those
+      decomposed parts must be ordered. I tried to keep this understandable in
+      my code, with a high-level function that goes through the different steps
+      of the NFD conversion process:
+    </p>
+    <div class="sourceCode" id="cb17">
+      <pre
+        class="sourceCode zig"
+      ><code class="sourceCode zig"><span id="cb17-1"><a href="#cb17-1" aria-hidden="true" tabindex="-1"></a><span class="kw">pub</span> <span class="kw">fn</span> makeNFD(coll<span class="op">:</span> <span class="op">*</span>Collator<span class="op">,</span> input<span class="op">:</span> <span class="op">*</span>std<span class="op">.</span>ArrayList(<span class="dt">u32</span>)) <span class="op">!</span><span class="dt">void</span> {</span>
+<span id="cb17-2"><a href="#cb17-2" aria-hidden="true" tabindex="-1"></a>   <span class="cf">if</span> (<span class="cf">try</span> fcd(coll<span class="op">,</span> input<span class="op">.</span>items)) <span class="cf">return</span>;</span>
+<span id="cb17-3"><a href="#cb17-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb17-4"><a href="#cb17-4" aria-hidden="true" tabindex="-1"></a>   <span class="cf">try</span> decompose(coll<span class="op">,</span> input);</span>
+<span id="cb17-5"><a href="#cb17-5" aria-hidden="true" tabindex="-1"></a>   reorder(input<span class="op">.</span>items);</span>
+<span id="cb17-6"><a href="#cb17-6" aria-hidden="true" tabindex="-1"></a>}</span></code></pre>
+    </div>
+    <p>
+      As you can see, we have a short <code>makeNFD</code> function that does
+      three things. First, it checks whether the input meets certain criteria
+      that obviate the need for any decomposition. (FCD is short for “fast
+      NFC/NFD.”) We can set aside the details of this part for the time being.
+      Second, in case NFD conversion <em>is</em> needed, we decompose the input
+      code points. Finally, we ensure that the decomposed code points are in
+      their canonical ordering.
+    </p>
+    <p>
+      Sounds easy, doesn’t it? But let’s have a look at the
+      <code>decompose</code> function. I’ve added comments for clarity.
+    </p>
+    <div class="sourceCode" id="cb18">
+      <pre
+        class="sourceCode zig"
+      ><code class="sourceCode zig"><span id="cb18-1"><a href="#cb18-1" aria-hidden="true" tabindex="-1"></a><span class="kw">fn</span> decompose(coll<span class="op">:</span> <span class="op">*</span>Collator<span class="op">,</span> input<span class="op">:</span> <span class="op">*</span>std<span class="op">.</span>ArrayList(<span class="dt">u32</span>)) <span class="op">!</span><span class="dt">void</span> {</span>
+<span id="cb18-2"><a href="#cb18-2" aria-hidden="true" tabindex="-1"></a>   <span class="at">var</span> i<span class="op">:</span> <span class="dt">usize</span> <span class="op">=</span> <span class="dv">0</span>;</span>
+<span id="cb18-3"><a href="#cb18-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb18-4"><a href="#cb18-4" aria-hidden="true" tabindex="-1"></a>   <span class="co">// We need to manage i manually in this loop</span></span>
+<span id="cb18-5"><a href="#cb18-5" aria-hidden="true" tabindex="-1"></a>   <span class="cf">while</span> (i <span class="op">&lt;</span> input<span class="op">.</span>items<span class="op">.</span>len) {</span>
+<span id="cb18-6"><a href="#cb18-6" aria-hidden="true" tabindex="-1"></a>      <span class="at">const</span> code_point <span class="op">=</span> input<span class="op">.</span>items[i];</span>
+<span id="cb18-7"><a href="#cb18-7" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb18-8"><a href="#cb18-8" aria-hidden="true" tabindex="-1"></a>      <span class="co">// Code points below a certain value never require decomposition</span></span>
+<span id="cb18-9"><a href="#cb18-9" aria-hidden="true" tabindex="-1"></a>      <span class="cf">if</span> (code_point <span class="op">&lt;</span> <span class="dv">0</span><span class="er">xC0</span>) {</span>
+<span id="cb18-10"><a href="#cb18-10" aria-hidden="true" tabindex="-1"></a>         i <span class="op">+=</span> <span class="dv">1</span>;</span>
+<span id="cb18-11"><a href="#cb18-11" aria-hidden="true" tabindex="-1"></a>         <span class="cf">continue</span>;</span>
+<span id="cb18-12"><a href="#cb18-12" aria-hidden="true" tabindex="-1"></a>      }</span>
+<span id="cb18-13"><a href="#cb18-13" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb18-14"><a href="#cb18-14" aria-hidden="true" tabindex="-1"></a>      <span class="co">// Certain Korean text requires special handling; don&#39;t ask</span></span>
+<span id="cb18-15"><a href="#cb18-15" aria-hidden="true" tabindex="-1"></a>      <span class="cf">if</span> (<span class="dv">0</span><span class="er">xAC00</span> <span class="op">&lt;=</span> code_point <span class="kw">and</span> code_point <span class="op">&lt;=</span> <span class="dv">0</span><span class="er">xD7A3</span>) {</span>
+<span id="cb18-16"><a href="#cb18-16" aria-hidden="true" tabindex="-1"></a>         <span class="at">const</span> len<span class="op">,</span> <span class="at">const</span> arr <span class="op">=</span> decomposeJamo(code_point);</span>
+<span id="cb18-17"><a href="#cb18-17" aria-hidden="true" tabindex="-1"></a>         <span class="cf">try</span> input<span class="op">.</span>replaceRange(i<span class="op">,</span> <span class="dv">1</span><span class="op">,</span> arr[<span class="dv">0</span><span class="op">..</span>len]);</span>
+<span id="cb18-18"><a href="#cb18-18" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb18-19"><a href="#cb18-19" aria-hidden="true" tabindex="-1"></a>         i <span class="op">+=</span> len;</span>
+<span id="cb18-20"><a href="#cb18-20" aria-hidden="true" tabindex="-1"></a>         <span class="cf">continue</span>;</span>
+<span id="cb18-21"><a href="#cb18-21" aria-hidden="true" tabindex="-1"></a>      }</span>
+<span id="cb18-22"><a href="#cb18-22" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb18-23"><a href="#cb18-23" aria-hidden="true" tabindex="-1"></a>      <span class="co">// If a canonical decomposition exists for this code point, apply it</span></span>
+<span id="cb18-24"><a href="#cb18-24" aria-hidden="true" tabindex="-1"></a>      <span class="cf">if</span> (<span class="cf">try</span> coll<span class="op">.</span>getDecomp(code_point)) <span class="op">|</span>decomp<span class="op">|</span> {</span>
+<span id="cb18-25"><a href="#cb18-25" aria-hidden="true" tabindex="-1"></a>         <span class="cf">try</span> input<span class="op">.</span>replaceRange(i<span class="op">,</span> <span class="dv">1</span><span class="op">,</span> decomp);</span>
+<span id="cb18-26"><a href="#cb18-26" aria-hidden="true" tabindex="-1"></a>         i <span class="op">+=</span> decomp<span class="op">.</span>len;</span>
+<span id="cb18-27"><a href="#cb18-27" aria-hidden="true" tabindex="-1"></a>         <span class="cf">continue</span>;</span>
+<span id="cb18-28"><a href="#cb18-28" aria-hidden="true" tabindex="-1"></a>      }</span>
+<span id="cb18-29"><a href="#cb18-29" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb18-30"><a href="#cb18-30" aria-hidden="true" tabindex="-1"></a>      i <span class="op">+=</span> <span class="dv">1</span>;</span>
+<span id="cb18-31"><a href="#cb18-31" aria-hidden="true" tabindex="-1"></a>   }</span>
+<span id="cb18-32"><a href="#cb18-32" aria-hidden="true" tabindex="-1"></a>}</span></code></pre>
+    </div>
+    <p>
+      The only trick here, apart from the weird Korean stuff, is that we need an
+      efficient way of fetching the canonical decomposition (if any) of a given
+      code point. I did this in a naïve but functional way, by building a hash
+      table from Unicode data. All that my <code>getDecomp</code> function does
+      is to check in that table. (The crazier part is that is that I have a
+      bunch of data structures like this that are derived from Unicode data, and
+      for performance reasons I have them serialized in binary formats. These
+      maps are in some cases large, up to a few hundred KiB on disk, but they
+      can be loaded rapidly at runtime, and a given collator instance needs to
+      do so only once.)
+    </p>
     <p><em>To be continued…</em></p>
   </body>
 </html>
