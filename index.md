@@ -697,8 +697,8 @@ _three_-character sequences: just 6. Any time that we encounter any of these 77
 code points, more complex handling is required. This means, among other things,
 that we cannot trim a shared prefix that ends with a character like `U+1B3A`.
 
-If you want to learn more about the handling of multi-code-point sequences, fear
-not---we'll return to this issue in discussing the construction of collation
-element arrays. May the gods help us.
+If you want to learn more about the treatment of multi-code-point sequences,
+fear not---we'll return to this issue in discussing the construction of
+collation element arrays. May the gods help us.
 
 _To be continued..._
