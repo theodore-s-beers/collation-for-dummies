@@ -665,4 +665,40 @@ configuration of the collator, characters that have _variable weights_. To be
 clear, these are all relatively uncommon scenarios. But the conformance tests
 will not pass with anything less than exactitude.
 
+### Multi-Code-Point Weights
+
+I feel bad for hiding this complexity until deep into the post. When I showed
+example lines from the DUCET earlier, I chose typical, easy examples. Each of
+those lines had one code point mapped to one set of weights. In reality, it can
+happen that one code point is mapped to multiple sets of weights, which is easy
+to handle; or that a sequence of two or three code points is mapped to one or
+more sets of weights, which is quite difficult to handle. Below are examples of
+each of these phenomena.
+
+```default
+191D      ; [.38DD.0020.0004][.38FB.0020.0004] # LIMBU LETTER GYAN
+1B3A      ; [.3C75.0020.0002]                  # BALINESE VOWEL SIGN RA REPA
+1B3A 1B35 ; [.3C76.0020.0002]                  # BALINESE VOWEL SIGN RA REPA TEDUNG
+```
+
+Imagine that we're iterating through a list of code points from a given string
+and building its _collation element array_. If we reach the character `U+191D`,
+that's fine---we just have two sets of weights to append to the CEA, rather than
+the one that we're accustomed to. But what if we encounter `U+1B3A`? This poses
+a real problem: we need to look ahead to the next code point. If what follows is
+`U+1B35`, then the UCA requires that we take the two code points as one unit and
+use the appropriate collation weights. Otherwise, `U+1B3A` will be handled on
+its own.
+
+The number of code points that can begin two-character sequences in the
+collation tables is very small in the grand scheme of things: 71 (as of Unicode
+version 16). There is an even smaller number of code points that can begin
+_three_-character sequences: just 6. Any time that we encounter any of these 77
+code points, more complex handling is required. This means, among other things,
+that we cannot trim a shared prefix that ends with a character like `U+1B3A`.
+
+If you want to learn more about the handling of multi-code-point sequences, fear
+not---we'll return to this issue in discussing the construction of collation
+element arrays. May the gods help us.
+
 _To be continued..._
