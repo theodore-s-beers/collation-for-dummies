@@ -378,7 +378,7 @@ time that the DFA reaches the "accept state," the function also has access to
 the value of the code point that has just been completed. For a case like
 Unicode normalization, this is perfect: what we want for the algorithm is a list
 of code points in `u32` (or `u21`, but you get the idea). Below you can see what
-I mean; I've added some comments for clarity.
+I mean; I've added some comments for clarity. This comes from `src/decode.zig`:
 
 ```zig
 pub fn bytesToCodepoints(codepoints: *std.ArrayList(u32), input: []const u8) !void {
@@ -458,7 +458,8 @@ Unicode standard if you want to write your own implementation. This is because
 you need to be able to determine, for any code point, what its canonical
 decomposition is (if any); and how those decomposed parts must be ordered. I
 tried to keep this understandable in my code, with a high-level function that
-goes through the different steps of the NFD conversion process:
+goes through the different steps of the NFD conversion process. This comes from
+`src/normalize.zig`:
 
 ```zig
 pub fn makeNFD(coll: *Collator, input: *std.ArrayList(u32)) !void {
@@ -524,22 +525,23 @@ serialized in binary formats. These maps are in some cases large, up to a few
 hundred KiB on disk, but they can be loaded rapidly at runtime, and a given
 collator instance needs to do so only once.)
 
-Once decomposition has been accomplished, all that is left for NFD is to fix the
+Once decomposition has been accomplished, all that's left for NFD is to fix the
 order of the code points so that it matches what is expected canonically in the
 Unicode standard. This is governed by a property called "canonical combining
 class." In the case of what we might refer to as _base letters_, the combining
 class is 0, i.e., "not reordered." Such code points are never moved in
 normalization. Diacritics, on the other hand, have a variety of nonzero
 combining class values; and when they appear next to one another in a sequence,
-they must be in order of ascending combining class. The most common scenario in
-which this might become an issue is when a letter has two or more diacritics
+they should be in order of ascending combining class. The most common scenario
+in which this might become an issue is when a letter has two or more diacritics
 attached to it. I can say from my own academic background that this happens with
-some frequency in Arabic text. There is a diacritic called _shadda_, which
-serves to add emphasis to a consonant; and there are other diacritics that serve
-as short vowel marks. It is by no means uncommon to see an Arabic letter that
-has both a _shadda_ and a vowel mark above it. In such cases, the base letter
-would have a combining class of 0, and the multiple diacritics should, ideally,
-be set in order of ascending combining class. Let's look at an example:
+some frequency in Arabic text. There is, for example, a diacritic called
+_shadda_, which serves to add emphasis to a consonant; and there are other
+diacritics that serve as short vowel marks. It is by no means uncommon to see an
+Arabic letter that has both a _shadda_ and a vowel mark above it. In such cases,
+the base letter would have a combining class of 0, and the multiple diacritics
+should, ideally, be set in order of ascending combining class. Let's look at an
+example:
 
 ```default
 U+0628 # Arabic letter bā’, CCC 0
