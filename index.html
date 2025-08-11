@@ -770,10 +770,10 @@
       be a composition of multiple other, lower-level code points must be broken
       down into those. I gave a simple example: “É,” the Latin-script capital E
       with an acute accent. This letter can be, and most often is, represented
-      by the single code point <code>U+00C9</code>. In fact, the overwhelming
-      majority of digital text that we encounter these days is in the UTF-8
-      encoding and in form NFC, i.e., with characters <em>composed</em> into
-      shorter representations where possible, and upholding
+      by the single code point <code>U+00C9</code>. In fact, the great majority
+      of digital text that we encounter these days is in the UTF-8 encoding and
+      in form NFC, i.e., with characters <em>composed</em> into shorter
+      representations where possible, and upholding
       <em>canonical equivalence</em>. (That is, characters that are considered
       equivalent are guaranteed to be represented the same way in form NFC.)
     </p>
@@ -872,6 +872,94 @@
       maps are in some cases large, up to a few hundred KiB on disk, but they
       can be loaded rapidly at runtime, and a given collator instance needs to
       do so only once.)
+    </p>
+    <p>
+      Once decomposition has been accomplished, all that is left for NFD is to
+      fix the order of the code points so that it matches what is expected
+      canonically in the Unicode standard. This is governed by a property called
+      “canonical combining class.” In the case of what we might refer to as
+      <em>base letters</em>, the combining class is 0, i.e., “not reordered.”
+      Such code points are never moved in normalization. Diacritics, on the
+      other hand, have a variety of nonzero combining class values; and when
+      they appear next to one another in a sequence, they must be in order of
+      ascending combining class. The most common scenario in which this might
+      become an issue is when a letter has two or more diacritics attached to
+      it. I can say from my own academic background that this happens with some
+      frequency in Arabic text. There is a diacritic called <em>shadda</em>,
+      which serves to add emphasis to a consonant; and there are other
+      diacritics that serve as short vowel marks. It is by no means uncommon to
+      see an Arabic letter that has both a <em>shadda</em> and a vowel mark
+      above it. In such cases, the base letter would have a combining class of
+      0, and the multiple diacritics should, ideally, be set in order of
+      ascending combining class. Let’s look at an example:
+    </p>
+    <div class="sourceCode" id="cb19">
+      <pre
+        class="sourceCode default"
+      ><code class="sourceCode default"><span id="cb19-1"><a href="#cb19-1" aria-hidden="true" tabindex="-1"></a>U+0628 # Arabic letter bā’, CCC 0</span>
+<span id="cb19-2"><a href="#cb19-2" aria-hidden="true" tabindex="-1"></a>U+064E # Arabic vowel fatḥa, CCC 30</span>
+<span id="cb19-3"><a href="#cb19-3" aria-hidden="true" tabindex="-1"></a>U+0651 # Arabic shadda, CCC 33</span></code></pre>
+    </div>
+    <p>
+      The above sequence meets the criteria of form NFD. Note that it is
+      <em>entirely conceivable</em> that someone might type the
+      <em>shadda</em> before the <em>fatḥa</em>; I do so myself. In that case,
+      reordering would be needed for NFD to be achieved, and by extension for
+      Unicode collation.
+    </p>
+    <p>
+      The last thing that I’ll show here is my <code>reorder</code> function,
+      mostly because it takes the form of a modified bubble sort, which amuses
+      me. In my several years of work as a programmer, this is the only context
+      in which I’ve been compelled to use everyone’s favorite inefficient
+      sorting algorithm. Comments are added for clarity.
+    </p>
+    <div class="sourceCode" id="cb20">
+      <pre
+        class="sourceCode zig"
+      ><code class="sourceCode zig"><span id="cb20-1"><a href="#cb20-1" aria-hidden="true" tabindex="-1"></a><span class="kw">fn</span> reorder(input<span class="op">:</span> []<span class="dt">u32</span>) <span class="dt">void</span> {</span>
+<span id="cb20-2"><a href="#cb20-2" aria-hidden="true" tabindex="-1"></a>   <span class="at">var</span> n <span class="op">=</span> input<span class="op">.</span>len;</span>
+<span id="cb20-3"><a href="#cb20-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb20-4"><a href="#cb20-4" aria-hidden="true" tabindex="-1"></a>   <span class="cf">while</span> (n <span class="op">&gt;</span> <span class="dv">1</span>) {</span>
+<span id="cb20-5"><a href="#cb20-5" aria-hidden="true" tabindex="-1"></a>      <span class="at">var</span> new_n<span class="op">:</span> <span class="dt">usize</span> <span class="op">=</span> <span class="dv">0</span>;</span>
+<span id="cb20-6"><a href="#cb20-6" aria-hidden="true" tabindex="-1"></a>      <span class="at">var</span> i<span class="op">:</span> <span class="dt">usize</span> <span class="op">=</span> <span class="dv">1</span>;</span>
+<span id="cb20-7"><a href="#cb20-7" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb20-8"><a href="#cb20-8" aria-hidden="true" tabindex="-1"></a>      <span class="co">// We compare two code points at a time</span></span>
+<span id="cb20-9"><a href="#cb20-9" aria-hidden="true" tabindex="-1"></a>      <span class="cf">while</span> (i <span class="op">&lt;</span> n) {</span>
+<span id="cb20-10"><a href="#cb20-10" aria-hidden="true" tabindex="-1"></a>         <span class="at">const</span> cc_b <span class="op">=</span> ccc<span class="op">.</span>getCombiningClass(input[i]);</span>
+<span id="cb20-11"><a href="#cb20-11" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb20-12"><a href="#cb20-12" aria-hidden="true" tabindex="-1"></a>         <span class="co">// If the second code point has CCC 0, we can advance by 2</span></span>
+<span id="cb20-13"><a href="#cb20-13" aria-hidden="true" tabindex="-1"></a>         <span class="cf">if</span> (cc_b <span class="op">==</span> <span class="dv">0</span>) {</span>
+<span id="cb20-14"><a href="#cb20-14" aria-hidden="true" tabindex="-1"></a>            i <span class="op">+=</span> <span class="dv">2</span>;</span>
+<span id="cb20-15"><a href="#cb20-15" aria-hidden="true" tabindex="-1"></a>            <span class="cf">continue</span>;</span>
+<span id="cb20-16"><a href="#cb20-16" aria-hidden="true" tabindex="-1"></a>         }</span>
+<span id="cb20-17"><a href="#cb20-17" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb20-18"><a href="#cb20-18" aria-hidden="true" tabindex="-1"></a>         <span class="at">const</span> cc_a <span class="op">=</span> ccc<span class="op">.</span>getCombiningClass(input[i <span class="op">-</span> <span class="dv">1</span>]);</span>
+<span id="cb20-19"><a href="#cb20-19" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb20-20"><a href="#cb20-20" aria-hidden="true" tabindex="-1"></a>         <span class="co">// The first code point should have CCC 0 or &lt;= cc_b</span></span>
+<span id="cb20-21"><a href="#cb20-21" aria-hidden="true" tabindex="-1"></a>         <span class="cf">if</span> (cc_a <span class="op">==</span> <span class="dv">0</span> <span class="kw">or</span> cc_a <span class="op">&lt;=</span> cc_b) {</span>
+<span id="cb20-22"><a href="#cb20-22" aria-hidden="true" tabindex="-1"></a>            i <span class="op">+=</span> <span class="dv">1</span>;</span>
+<span id="cb20-23"><a href="#cb20-23" aria-hidden="true" tabindex="-1"></a>            <span class="cf">continue</span>;</span>
+<span id="cb20-24"><a href="#cb20-24" aria-hidden="true" tabindex="-1"></a>         }</span>
+<span id="cb20-25"><a href="#cb20-25" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb20-26"><a href="#cb20-26" aria-hidden="true" tabindex="-1"></a>         <span class="co">// This means the check failed, and a swap is needed</span></span>
+<span id="cb20-27"><a href="#cb20-27" aria-hidden="true" tabindex="-1"></a>         std<span class="op">.</span>mem<span class="op">.</span>swap(<span class="dt">u32</span><span class="op">,</span> <span class="op">&amp;</span>input[i <span class="op">-</span> <span class="dv">1</span>]<span class="op">,</span> <span class="op">&amp;</span>input[i]);</span>
+<span id="cb20-28"><a href="#cb20-28" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb20-29"><a href="#cb20-29" aria-hidden="true" tabindex="-1"></a>         <span class="co">// We use a small optimization to avoid rechecking sorted ranges</span></span>
+<span id="cb20-30"><a href="#cb20-30" aria-hidden="true" tabindex="-1"></a>         new_n <span class="op">=</span> i;</span>
+<span id="cb20-31"><a href="#cb20-31" aria-hidden="true" tabindex="-1"></a>         i <span class="op">+=</span> <span class="dv">1</span>;</span>
+<span id="cb20-32"><a href="#cb20-32" aria-hidden="true" tabindex="-1"></a>      }</span>
+<span id="cb20-33"><a href="#cb20-33" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb20-34"><a href="#cb20-34" aria-hidden="true" tabindex="-1"></a>      n <span class="op">=</span> new_n;</span>
+<span id="cb20-35"><a href="#cb20-35" aria-hidden="true" tabindex="-1"></a>   }</span>
+<span id="cb20-36"><a href="#cb20-36" aria-hidden="true" tabindex="-1"></a>}</span></code></pre>
+    </div>
+    <p>
+      As you can see, this relies on repeated calls of
+      <code>getCombiningClass</code>. I found, while benchmarking my UCA
+      implementation, that looking up combining classes is one of the hottest
+      paths in the entire library. It demands a special degree of optimization,
+      which is an interesting problem but beyond the scope of this post.
     </p>
     <p><em>To be continued…</em></p>
   </body>

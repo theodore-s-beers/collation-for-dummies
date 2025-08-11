@@ -433,8 +433,8 @@ that is considered (per the Unicode standard) to be a composition of multiple
 other, lower-level code points must be broken down into those. I gave a simple
 example: "É," the Latin-script capital E with an acute accent. This letter can
 be, and most often is, represented by the single code point `U+00C9`. In fact,
-the overwhelming majority of digital text that we encounter these days is in the
-UTF-8 encoding and in form NFC, i.e., with characters _composed_ into shorter
+the great majority of digital text that we encounter these days is in the UTF-8
+encoding and in form NFC, i.e., with characters _composed_ into shorter
 representations where possible, and upholding _canonical equivalence_. (That is,
 characters that are considered equivalent are guaranteed to be represented the
 same way in form NFC.)
@@ -523,5 +523,83 @@ that are derived from Unicode data, and for performance reasons I have them
 serialized in binary formats. These maps are in some cases large, up to a few
 hundred KiB on disk, but they can be loaded rapidly at runtime, and a given
 collator instance needs to do so only once.)
+
+Once decomposition has been accomplished, all that is left for NFD is to fix the
+order of the code points so that it matches what is expected canonically in the
+Unicode standard. This is governed by a property called "canonical combining
+class." In the case of what we might refer to as _base letters_, the combining
+class is 0, i.e., "not reordered." Such code points are never moved in
+normalization. Diacritics, on the other hand, have a variety of nonzero
+combining class values; and when they appear next to one another in a sequence,
+they must be in order of ascending combining class. The most common scenario in
+which this might become an issue is when a letter has two or more diacritics
+attached to it. I can say from my own academic background that this happens with
+some frequency in Arabic text. There is a diacritic called _shadda_, which
+serves to add emphasis to a consonant; and there are other diacritics that serve
+as short vowel marks. It is by no means uncommon to see an Arabic letter that
+has both a _shadda_ and a vowel mark above it. In such cases, the base letter
+would have a combining class of 0, and the multiple diacritics should, ideally,
+be set in order of ascending combining class. Let's look at an example:
+
+```default
+U+0628 # Arabic letter bā’, CCC 0
+U+064E # Arabic vowel fatḥa, CCC 30
+U+0651 # Arabic shadda, CCC 33
+```
+
+The above sequence meets the criteria of form NFD. Note that it is _entirely
+conceivable_ that someone might type the _shadda_ before the _fatḥa_; I do so
+myself. In that case, reordering would be needed for NFD to be achieved, and by
+extension for Unicode collation.
+
+The last thing that I'll show here is my `reorder` function, mostly because it
+takes the form of a modified bubble sort, which amuses me. In my several years
+of work as a programmer, this is the only context in which I've been compelled
+to use everyone's favorite inefficient sorting algorithm. Comments are added for
+clarity.
+
+```zig
+fn reorder(input: []u32) void {
+   var n = input.len;
+
+   while (n > 1) {
+      var new_n: usize = 0;
+      var i: usize = 1;
+
+      // We compare two code points at a time
+      while (i < n) {
+         const cc_b = ccc.getCombiningClass(input[i]);
+
+         // If the second code point has CCC 0, we can advance by 2
+         if (cc_b == 0) {
+            i += 2;
+            continue;
+         }
+
+         const cc_a = ccc.getCombiningClass(input[i - 1]);
+
+         // The first code point should have CCC 0 or <= cc_b
+         if (cc_a == 0 or cc_a <= cc_b) {
+            i += 1;
+            continue;
+         }
+
+         // This means the check failed, and a swap is needed
+         std.mem.swap(u32, &input[i - 1], &input[i]);
+
+         // We use a small optimization to avoid rechecking sorted ranges
+         new_n = i;
+         i += 1;
+      }
+
+      n = new_n;
+   }
+}
+```
+
+As you can see, this relies on repeated calls of `getCombiningClass`. I found,
+while benchmarking my UCA implementation, that looking up combining classes is
+one of the hottest paths in the entire library. It demands a special degree of
+optimization, which is an interesting problem but beyond the scope of this post.
 
 _To be continued..._
