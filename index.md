@@ -672,7 +672,7 @@ example lines from the DUCET earlier, I chose typical, easy examples. Each of
 those lines had one code point mapped to one set of weights. In reality, it can
 happen that one code point is mapped to multiple sets of weights, which is easy
 to handle; or that a sequence of two or three code points is mapped to one or
-more sets of weights, which is quite difficult to handle. Below are examples of
+more sets of weights, which is rather difficult to handle. Below are examples of
 each of these phenomena.
 
 ```default
