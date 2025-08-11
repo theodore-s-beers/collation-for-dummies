@@ -745,4 +745,79 @@ effects on the treatment of surrounding characters. This is why we cannot safely
 trim a shared prefix from two strings if the "shifted" approach is specified and
 the final code point in the prefix has variable weights.
 
+## The Collation Element Array
+
+Now we reach the heart of the matter. I know that I've already gone into some
+depth in the preceding sections, but generating the CEA is a different beast. My
+primary function in this area is too long---a little over a hundred actual lines
+of code, more with comments and empty lines---to show here in full. And that
+function, `generateCEA`, calls a number of smaller utility functions that I've
+abstracted out.
+
+The easy part to understand is that `generateCEA` takes a list of code points
+representing one string, iterates over them, fetches their collation weights,
+and appends those to a separate list, namely the CEA. Most of the function takes
+place in a `while` loop, which is completed once all the code points have been
+processed. The complicated part is that, in each iteration of the big loop,
+there are seven possible outcomes for the code point(s) in question. I figure
+that I can at least explain those different paths here. I have them labeled in
+my code in order of how much work they represent, from least to greatest.
+
+1. A low code point (below `U+00B7`) can be looked up in a small table, its
+   weights retrieved very quickly.
+
+2. A higher code point, but one that is still "safe"---i.e., not among the
+   possible starters of two- or three-code-point sequences---can be looked up in
+   a larger map of weights. This is still quite simple.
+
+3. A code point that is not listed at all in the collation weight tables can
+   have its weights calculated algorithmically. These are called "implicit
+   weights," and in fact they apply to large swaths of the Unicode space,
+   including most ranges of CJK characters. It is to our great benefit that so
+   many code points don't need explicitly defined collation weights; the tables
+   would otherwise be much, much larger. At any rate, calculating implicit
+   weights for the CEA is still a good outcome.
+
+4. We encounter a code point that could begin a multi-character sequence, so we
+   look ahead to the next one or two code points. This _does_ yield a match,
+   consisting of two code points. The UCA then requires us to check for a third
+   character that may be "discontiguous" with the first two---i.e., to look
+   further ahead in case of a malformed sequence. This is where I find that the
+   UCA rules veer into the ridiculous; but whatever. Outcome 4 is when we check
+   for such a discontiguous match and actually find one.
+
+5. We encounter a code point that could begin a multi-character sequence, so we
+   look ahead to the next one or two code points. This yields a match. If what
+   we found is already a three-code-point sequence, we don't need to look any
+   further for a possible discontiguous match, and we can process the weights
+   and move on. Alternatively, this path can be reached if we found a
+   two-code-point sequence, looked further for a discontiguous match, and failed
+   to find one. Outcome 5 could, therefore, be better or worse than 4.
+
+6. At this point, things get weirder. Let's say we encounter a code point that
+   could begin a multi-character sequence, so we look ahead to the next one or
+   two code points. But we don't find anything. What then? Well, we still need
+   to check for a discontiguous match. Outcome 6 is reached if we carry out that
+   check and actually find something.
+
+7. Finally, in the most cursed path, we encounter a code point that could begin
+   a multi-character sequence, so we look ahead to the next one or two code
+   points. We don't find such a sequence initially, so we check for a
+   discontiguous match. But we don't find that, either. In the end, we take just
+   the one code point with which we started, fetch its weights, and add those to
+   the CEA. What a hassle!
+
+From what I've seen, in benchmarks on real-world text data, we exit this loop
+via path 1, 2, or 3 almost all the time. So it's not so bad, not terribly
+inefficient. But I think the whole matter of "discontiguous matches" in the UCA
+is absurd, particularly given that the algorithm requires us to normalize an
+input string to form NFD before we even reach this stage. The first time that I
+wrote an implementation, in Rust, it took me ages to get the CEA function to a
+point where the conformance tests would pass.
+
+If anyone wants more detail on CEA generation, I could certainly provide it. My
+inclination, however, is to move on with this post. Once the collation element
+arrays are in place, the algorithm can move forward with processing them into
+sort keys, which is considerably simpler.
+
 _To be continued..._
