@@ -364,8 +364,8 @@ one that I chose to adapt to Zig, however, is probably one of the most elegant
 pieces of code I've ever seen. It's a famous UTF-8 decoder written in C by Björn
 Höhrmann, subsequently improved by Rich Felker (creator/maintainer of musl).
 
-This decoder is based on a deterministic finite automaton, i.e. a state machine,
-wherein each byte of UTF-8 that is encountered causes a certain state
+This decoder is based on a deterministic finite automaton, i.e., a state
+machine, wherein each byte of UTF-8 that is encountered causes a certain state
 transition. There is a "home state," or an "accept state," which is reached each
 time that a full code point has been processed. This can happen, of course,
 after anything from one to four bytes.
