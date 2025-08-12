@@ -969,4 +969,68 @@ performance improvement strategies that I've applied in the long journey from
 "conformant but terrible" to "pretty decent." These are not necessarily in order
 of importance, but rather in order of computation. I hope you see what I mean.
 
+1. **Build native data structures ahead of time.** For me, as I mentioned
+   before, this means mostly hash maps associating Unicode code points with
+   certain key attributes. I have, for example, a map of code points to their
+   canonical decompositions (if any); a map that facilitates the "fast NFC/NFD"
+   check as an alternative to full normalization; a map of single code points to
+   their collation weights (the largest structure by far); and a map of
+   multi-code-point sequences to their weights. There are other options; one
+   could probably use tries instead in some of these contexts. But I've gotten
+   respectable performance from hash tables, given a good hash function.
+
+2. **Pack data** as well, for compactness, hashing efficiency, and speed. You
+   may have noticed in code examples above that I have each _set of weights_
+   represented as a `u32`, built from something like `[.2422.0020.0002]`. How
+   does that work? It turns out that all of the actually used primary weight
+   values fit within 16 bits; the secondary weights within 9; and the tertiaries
+   within 6. (In fact, there might still be a bit to spare in either the
+   secondaries or the tertiaries; I can't recall.) This makes 31 bits, leaving
+   one for a flag for variable weights. Packing the weights this way is a fine
+   tradeoff; they can be unpacked with minimal effort and no allocation. An even
+   neater optimization is enabled by the fact that Unicode code points fall in
+   the `u21` range. When we build a map of multi-code-point sequences to their
+   collation weights, we can pack those keys into a `u64`, since they consist of
+   either two or three code points. This is much better than using, say, a
+   vector of `u32` as the key type.
+
+3. **Add fast paths.** As I mentioned earlier, trying to reach a collation
+   result by comparing ASCII-range characters at the beginning of the two
+   strings is a significant optimization. And it comes into play more than you
+   might expect. If we're comparing the names "Björn" and "Dvořák," do we need
+   to go through the full UCA? The answer is no, regardless of the fact that the
+   strings both contain accents. We can compare their opening characters and
+   return at once.
+
+4. **Avoid unnecessary computation.** This is connected to the previous point,
+   but here I have in mind the prefix-trimming step. If we're collating, say,
+   "Réunionnais" and "Réunionnaise," we shouldn't need to hit the CEA step in
+   the algorithm; one string is a prefix of the other (and they include no risky
+   characters). _Early return is a blessing._ In more realistic cases, we might
+   not avoid generating the collation element arrays, but we can at least limit
+   the number of code points to consider.
+
+5. **Favor lazy/incremental computation.** This principle applies to multiple
+   parts of my UCA implementation, most obviously when it comes to the sort key.
+   If you read the UCA standard, you might get the impression that the next step
+   after generating CEAs is to turn each of them into a full sort key---i.e., a
+   list of all nonzero primary weights, followed by all nonzero secondaries,
+   etc. This is absolutely unnecessary. It's better to compare the CEAs one
+   primary weight at a time, then one secondary weight at a time, and so on.
+   Most collation decisions are reached at the primary level, after all. How
+   often are two strings identical except for diacritics or capitalization? Even
+   though incremental generation of sort keys will mean iterating over the CEAs
+   more than once in some cases, it still saves time.
+
+6. **Limit and reuse allocations.** When I first started implementing the UCA,
+   in Rust, I didn't know much about memory management, and I followed some
+   inefficient practices. For example, on each run of the collation function, I
+   would allocate new lists of code points for the input strings. A more
+   experienced programmer suggested having the `Collator` struct own these
+   lists, and just clearing and reusing them in each run. This was a _huge_ win!
+   It made my benchmarks run something like three times faster. Ever since then,
+   I've been careful about allocating in hot paths. This is the only reason that
+   I was subsequently able to write a decent implementation in Zig, where
+   there's no alternative to manual memory management.
+
 _To be continued..._
