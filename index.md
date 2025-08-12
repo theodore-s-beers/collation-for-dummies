@@ -934,4 +934,39 @@ fn nextValidPrimaryShifting(cea: []const u32, i: *usize) u16 {
 It's elegant, in its own way: variable weights are handled via primary-level
 weights; we simply delay consideration of them until after the tertiary level.
 
+## Performance Optimization
+
+While I've gone over much of the process of the Unicode Collation Algorithm in a
+logical sense, figuring this out is only the first part of writing an
+implementation. Performance is a major concern. The reality for a collation
+function is that it is meant to be plugged into a sort function to be used as
+the comparator; and the comparator that the UCA replaces, i.e., naïve comparison
+of byte arrays, is _extremely fast_. If Unicode collation is too slow, then
+perhaps people won't bother using it. It's already difficult enough to get
+programmers to support Unicode-aware systems ("Back in my day, ASCII was more
+than sufficient"). Imagine, e.g., integrating a UCA implementation into a DBMS
+to sort millions of rows of data. It's a good thing that the Unicode project
+[ICU](https://icu.unicode.org/) (International Components for Unicode) maintains
+its own standards-compliant and generally highly performant libraries, including
+for collation.
+
+One of my [benchmarks](https://github.com/theodore-s-beers/feruca-benchmarks)
+uses the full text of the German Wikipedia article on the planet Mars, around
+10,000 words, which is split on whitespace and then sorted. On my own laptop, as
+of early August 2025, my Rust implementation of the UCA can accomplish this
+sorting in about 4.5 ms. Ignoring Unicode and sorting the same data based on
+byte values takes only 1.1 ms. The price of Unicode-awareness is always going to
+be a slowdown of at least, say, 3x. But that's still fast enough for use in
+demanding production systems.
+
+Anyway, how do we even get to that point? If you try the simplest way of
+implementing the UCA, that will probably mean looking at code points one at a
+time and searching for their weights in the _text files_ of the published
+collation weight tables. This will, unsurprisingly, be on the order of hundreds
+of times slower. But it was my starting point, and it may be yours, too, if you
+ever decide to attack the problem on your own. I'd like to outline some of the
+performance improvement strategies that I've applied in the long journey from
+"conformant but terrible" to "pretty decent." These are not necessarily in order
+of importance, but rather in order of computation. I hope you see what I mean.
+
 _To be continued..._
