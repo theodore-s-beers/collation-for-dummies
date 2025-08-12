@@ -820,4 +820,118 @@ inclination, however, is to move on with this post. Once the collation element
 arrays are in place, the algorithm can move forward with processing them into
 sort keys, which is considerably simpler.
 
+## Sort Keys
+
+If you've read this far, you know how this works. We have two collation element
+arrays, each a list of _sets of weights_ pertaining to the input strings of the
+collation function, which is charged with returning an ordering
+value---something like "less than," "equal to," or "greater than." And all that
+we need to do now is to consider the collation weights that we've collected, one
+_level_ at a time, one _index_ at a time. As soon as we find a difference, we
+return it.
+
+Let me just show you how this looks in code, taking the example of the primary
+level. Comments have been added for clarity. This is from `src/sort_key.zig`:
+
+```zig
+fn comparePrimary(a_cea: []const u32, b_cea: []const u32) ?std.math.Order {
+   // We need separate iterators, advancing to the next nonzero value in each
+   var i_a: usize = 0;
+   var i_b: usize = 0;
+
+   // Loop until return: a result, or iterator exhaustion
+   while (true) {
+      const a_p = nextValidPrimary(a_cea, &i_a);
+      const b_p = nextValidPrimary(b_cea, &i_b);
+
+      // If we found a difference, return it
+      if (a_p != b_p) return util.cmp(u16, a_p, b_p);
+
+      if (a_p == 0) return null; // i.e., both exhausted
+   }
+
+   // Assert to the compiler that we will definitely return from the loop
+   unreachable;
+}
+```
+
+For good measure, let's also have a look at the relevant iterator function:
+
+```zig
+fn nextValidPrimary(cea: []const u32, i: *usize) u16 {
+   while (i.* < cea.len) {
+      const nextWeights = cea[i.*];
+
+      // u32 max is used as a sentinel value to end the CEA
+      if (nextWeights == std.math.maxInt(u32)) return 0;
+
+      const nextPrimary = primary(nextWeights);
+      i.* += 1;
+
+      if (nextPrimary != 0) return nextPrimary;
+   }
+
+   return 0;
+}
+```
+
+As you can see, we progressively find the next nonzero primary weight in each
+CEA. The iterator returns zero once it is exhausted. The comparison function, in
+turn, returns a null value if no meaningful difference was observed. In that
+case, sort key processing would continue to the secondary level, and so on. This
+is all straightforward enough.
+
+What may yet be of interest is the handling of variable weights in the "shifted"
+approach. How does that actually work? In brief, "shifting" the weights for a
+variable-weight character involves setting its secondary and tertiary weights to
+zero, and marking it somehow so that its primary weight is ignored at the
+primary level. We then add a "quaternary" level of weight comparison, at which
+point we consider the _primary_ weights once again---this time including the
+previously ignored weights of any variable-weight code points.
+
+In code, all this means is that we have a separate weight comparison function
+for the primary level when the "shifted" approach is being followed; and there
+is a "quaternary-level" weight comparison at the end, which ends up being a
+replay of the primary level, this time not ignoring anything.
+
+```zig
+fn comparePrimaryShifting(a_cea: []const u32, b_cea: []const u32) ?std.math.Order {
+   var i_a: usize = 0;
+   var i_b: usize = 0;
+
+   while (true) {
+      const a_p = nextValidPrimaryShifting(a_cea, &i_a);
+      const b_p = nextValidPrimaryShifting(b_cea, &i_b);
+
+      if (a_p != b_p) return util.cmp(u16, a_p, b_p);
+      if (a_p == 0) return null; // i.e., both exhausted
+   }
+
+   unreachable;
+}
+
+fn nextValidPrimaryShifting(cea: []const u32, i: *usize) u16 {
+   while (i.* < cea.len) {
+      const nextWeights = cea[i.*];
+      if (nextWeights == std.math.maxInt(u32)) return 0;
+
+      // In this case, we ignore variable weights
+      if (variability(nextWeights)) {
+         i.* += 1;
+         continue;
+      }
+
+      const nextPrimary = primary(nextWeights);
+      i.* += 1;
+
+      if (nextPrimary != 0) return nextPrimary;
+   }
+
+   return 0;
+}
+```
+
+It's elegant, in its own way: variable weights are handled via primary-level
+weights; we simply delay consideration of them until after the tertiary level.
+
 _To be continued..._
