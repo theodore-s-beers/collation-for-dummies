@@ -15,9 +15,9 @@ div.sourceCode {
   margin-top: 1.5rem;
 }
 
-p,
 h2,
-h3 {
+h3,
+p {
   margin-top: 1rem;
 }
 
@@ -31,4 +31,8 @@ p.date {
 
 pre.sourceCode {
   margin: 0.5rem;
+}
+
+ul {
+  margin-top: 0.5rem;
 }

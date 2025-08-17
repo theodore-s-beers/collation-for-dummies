@@ -20,6 +20,19 @@ in this post will be in Zig. You may also like to visit my
 a little web app that demonstrates the differences among a few approaches to
 collation._
 
+## Table of Contents
+
+- [Introduction](#introduction)
+- [Basic Idea](#basic-idea)
+- [Simple but Real Examples](#simple-but-real-examples)
+- [The Plot Thickens](#the-plot-thickens)
+- [From UTF-8 to Code Points](#from-utf-8-to-code-points)
+- [NFD Normalization](#nfd-normalization)
+- [Prefix Trimming](#prefix-trimming)
+- [The Collation Element Array](#the-collation-element-array)
+- [Sort Keys](#sort-keys)
+- [Performance Optimization](#performance-optimization)
+
 ## Introduction
 
 Given two strings of UTF-8-encoded text---let's say, for example, the names
