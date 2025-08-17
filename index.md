@@ -945,7 +945,7 @@ of byte arrays, is _extremely fast_. If Unicode collation is too slow, then
 perhaps people won't bother using it. It's already difficult enough to get
 programmers to support Unicode-aware systems ("Back in my day, ASCII was more
 than sufficient"). Imagine, e.g., integrating a UCA implementation into a DBMS
-to sort millions of rows of data. It's a good thing that the Unicode project
+to sort millions of rows of data. We're fortunate that the Unicode project
 [ICU](https://icu.unicode.org/) (International Components for Unicode) maintains
 its own standards-compliant and generally highly performant libraries, including
 for collation.
@@ -976,8 +976,9 @@ of importance, but rather in order of computation. I hope you see what I mean.
    check as an alternative to full normalization; a map of single code points to
    their collation weights (the largest structure by far); and a map of
    multi-code-point sequences to their weights. There are other options; one
-   could probably use tries instead in some of these contexts. But I've gotten
-   respectable performance from hash tables, given a good hash function.
+   could probably use [tries](https://en.wikipedia.org/wiki/Trie) instead in
+   some of these contexts. But I've gotten respectable performance from hash
+   tables, given a good hash function.
 
 2. **Pack data** as well, for compactness, hashing efficiency, and speed. You
    may have noticed in code examples above that I have each _set of weights_
@@ -987,11 +988,11 @@ of importance, but rather in order of computation. I hope you see what I mean.
    within 6. (In fact, there might still be a bit to spare in either the
    secondaries or the tertiaries; I can't recall.) This makes 31 bits, leaving
    one for a flag for variable weights. Packing the weights this way is a fine
-   tradeoff; they can be unpacked with minimal effort and no allocation. An even
+   tradeoff: they can be unpacked with minimal effort and no allocation. An even
    neater optimization is enabled by the fact that Unicode code points fall in
    the `u21` range. When we build a map of multi-code-point sequences to their
-   collation weights, we can pack those keys into a `u64`, since they consist of
-   either two or three code points. This is much better than using, say, a
+   collation weights, we can pack those _keys_ into a `u64`, since they consist
+   of either two or three code points. This is much better than using, say, a
    vector of `u32` as the key type.
 
 3. **Add fast paths.** As I mentioned earlier, trying to reach a collation
