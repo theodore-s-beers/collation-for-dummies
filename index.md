@@ -32,6 +32,7 @@ collation._
 - [The Collation Element Array](#the-collation-element-array)
 - [Sort Keys](#sort-keys)
 - [Performance Optimization](#performance-optimization)
+- [What About Tailoring?](#what-about-tailoring)
 
 ## Introduction
 
@@ -1046,5 +1047,47 @@ of importance, but rather in order of computation. I hope you see what I mean.
    I've been careful about allocating in hot paths. This is the only reason that
    I was subsequently able to write a decent implementation in Zig, where
    there's no alternative to manual memory management.
+
+## What About Tailoring?
+
+I've written a lot here about implementing Unicode collation, deliberately
+ignoring a major issue: some different locales demand different approaches to
+sorting text! It's not as though the Unicode standard can establish one big
+table of collation weights and have it work for everyone in all contexts. People
+using, say, an Arabic locale may require that characters in the Arabic script
+sort _before_ rather than after the Latin script. The French language as used in
+France has subtly different collation rules from Quebec French. German has
+different
+[alphabetization schemes](https://de.wikipedia.org/wiki/Alphabetische_Sortierung#Deutschland),
+one of them "normal," the other intended specifically for lists of names and
+often called "phone book order" (not that many of us still live who remember
+using phone books).
+
+It would in fact be fair to say that each and every locale involves its own
+adjustments to the default collation order---sometimes small, sometimes great. A
+table like DUCET is a good starting point, and it comes close to working
+out-of-the-box for many languages/locales. But still, a key part of the Unicode
+Collation Algorithm is that it is designed to be _tailored_ to meet the needs of
+each locale, each set of rules for sorting, each user's preferences. Another
+common example is that people sometimes prefer to ignore capitalization
+differences when sorting text. This is known as adjusting the _strength_ of
+collation, and it is one of the easiest changes to make in the algorithm. Taken
+together, the options that exist are effectively limitless.
+
+Why have I held back from discussing tailoring? Because it would require a post
+of its own, and this one is already several thousand words long. Furthermore,
+developing a conformant implementation of the UCA is a prerequisite for handling
+locale tailoring. The algorithm itself is far from trivial, as we've seen.
+
+I'm not going to get into the weeds at this point, but if anyone out there is
+interested in learning more about tailoring, I would encourage you to check out
+the [Common Locale Data Repository](https://github.com/unicode-org/cldr) (CLDR),
+a project of the Unicode Consortium that maintains a huge collection of various
+kinds of locale data for software internationalization. There is also a Unicode
+[technical standard](https://www.unicode.org/reports/tr35/tr35-collation.html#Collation_Tailorings)
+specific to locale tailoring in collation. I'll warn you in advance: it's quite
+the rabbit hole.
+
+My own implementations of the UCA have limited support for tailoring.
 
 _To be continued..._
