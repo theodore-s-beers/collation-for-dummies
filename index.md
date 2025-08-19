@@ -2,6 +2,7 @@
 title: "Unicode Collation for Dummies"
 author: "Theodore Beers"
 date: "August 2025"
+lang: "en"
 ---
 
 This post is meant as an introduction to the
@@ -33,6 +34,7 @@ collation._
 - [Sort Keys](#sort-keys)
 - [Performance Optimization](#performance-optimization)
 - [What About Tailoring?](#what-about-tailoring)
+- [Conclusion](#conclusion)
 
 ## Introduction
 
