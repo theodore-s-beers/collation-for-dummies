@@ -1088,6 +1088,44 @@ kinds of locale data for software internationalization. There is also a Unicode
 specific to locale tailoring in collation. I'll warn you in advance: it's quite
 the rabbit hole.
 
-My own implementations of the UCA have limited support for tailoring.
+My own implementations of the UCA have limited support for tailoring. When I was
+writing the Rust implementation, it was intended partly for the software stack
+of a research project to which I belong
+([at the Freie Universität Berlin](https://www.geschkult.fu-berlin.de/en/e/kalila-wa-dimna/)),
+which curates databases of textual data, much of it in the Arabic script. It was
+important to members of that group to have ways of sorting text so that either
+Arabic letters would come before Latin letters, or the two scripts would be
+interwoven. I added the relevant tailorings to my collator; in my
+"[Text Sorting Playground](https://www.theobeers.com/allsorts/)," you can try
+these with the "Arabic first" and "Arabic interleaved" options. My Zig
+implementation still has fewer features, offering only choices between DUCET and
+the CLDR default table, and between the "shifted" and "non-ignorable" approaches
+to variable-weight characters.
 
-_To be continued..._
+## Conclusion
+
+Wow, this took a while to write! I'm glad I finally sat down and collected some
+of my thoughts after working with the Unicode Collation Algorithm in two
+languages over a period of a few years (on and off; mostly off). I hope this
+will prove useful, or at least interesting, to others whose nerd interests touch
+on Unicode, internationalization, or diversity in languages and scripts.
+
+One thing that I realized about Unicode as an institution is that, although they
+work largely in the open and publish standards documents that make it possible
+for us plebs to build our own systems, very few people actually do that. The
+best and by far the most popular implementation of any given Unicode standard is
+the one produced by people who work for Unicode---or who work at Google and are
+paid to contribute to Unicode. Same difference, amirite? The point is that, if
+you want a collator, you'll probably just use the one from icu4c (or more
+recently icu4x).
+
+Is there any point in implementing the UCA on your own? What I can say is that I
+built something of use to myself and my colleagues, while learning a tremendous
+amount about text encoding and becoming a much stronger programmer. I'm also
+proud of the performance characteristics and small dependency trees of my
+implementations. In fact, the one in Zig has absolutely no dependencies beyond
+the language's standard library. If you ever want to import it, what you see is
+what you get.
+
+Please feel free to get in touch with me if you have any questions, corrigenda,
+etc. Anyone who reads this far has my appreciation and respect.
