@@ -8,7 +8,7 @@
       content="width=device-width, initial-scale=1.0, user-scalable=yes"
     />
     <meta name="author" content="Theodore Beers" />
-    <title>Unicode Collation for Dummies</title>
+    <title>How Unicode Collation Works</title>
     <style>
       /* Default styles provided by pandoc.
     ** See https://pandoc.org/MANUAL.html#variables-for-html for config info.
@@ -261,21 +261,21 @@
   </head>
   <body>
     <header id="title-block-header">
-      <h1 class="title">Unicode Collation for Dummies</h1>
+      <h1 class="title">How Unicode Collation Works</h1>
       <p class="author">Theodore Beers</p>
       <p class="date">August 2025 (<em>updated April 2026</em>)</p>
     </header>
     <p>
       This post is an introduction to the
       <a href="https://www.unicode.org/reports/tr10/">Unicode Collation Algorithm</a>
-      (UCA), a standardized solution to a problem that turns out to be surprisingly
-      complex: how can we alphabetically sort items of text when the characters go
-      beyond the basic Latin alphabet? Let’s find out…
+      (UCA), a standardized solution to a problem that turns out to be somewhat complex:
+      how can we alphabetically sort items of text when the characters go beyond the
+      basic Latin alphabet? Let’s find out…
     </p>
     <p>
       <em
-        >Sidebar: I maintain a simple but conformant &amp; performant implementation of
-        the UCA in Rust, called
+        >Sidebar: I maintain a minimalistic but conformant &amp; performant
+        implementation of the UCA in Rust, called
         <a href="https://github.com/theodore-s-beers/feruca">feruca</a> ; and I recently
         adapted it to Zig, in a library called
         <a href="https://github.com/theodore-s-beers/later">later</a> . Code examples in
@@ -303,22 +303,25 @@
     </ul>
     <h2 id="introduction">Introduction</h2>
     <p>
-      Given two strings of UTF-8-encoded text—let’s say, for example, the names “Edgar”
-      and “Frank”—it’s trivial for a computer to determine which of them should come
-      first alphabetically. If we look at a representation of those strings as arrays of
-      byte values, we find that “Edgar” is (in hexadecimal)
+      Given two strings of UTF-8-encoded text – let’s say, for example, the names
+      “Edgar” and “Frank” – it’s trivial for a computer to determine which of them
+      should come first alphabetically. If we look at a representation of those strings
+      as arrays of byte values, we find that “Edgar” is (in hexadecimal)
       <code>[45, 64, 67, 61, 72]</code>; and “Frank” is
       <code>[46, 72, 61, 6E, 6B]</code>. Simple array comparison yields a difference at
       index <code>0</code>, with E being “less than” F, so Edgar sorts before Frank.
     </p>
     <p>
-      This is a happy consequence of the fact that early text encoding schemes—notably
-      ASCII, which was inherited by Unicode—assigned numerical values to the letters
-      that they included in <em>a kind of</em> alphabetical order. There is still the
-      issue that ASCII groups all the uppercase letters before all the lowercase
-      letters, so that, for example, “earnest” will sort after “Frank.” But at least we
-      have an alphabetical order of byte values <em>within</em> the uppercase and
-      lowercase groups.
+      This is a happy consequence of the fact that early text encoding schemes – notably
+      ASCII, which was
+      <a href="https://en.wikipedia.org/wiki/Basic_Latin_(Unicode_block)"
+        >inherited by Unicode</a
+      >
+      – assigned numerical values to the letters that they included in
+      <em>a kind of</em> alphabetical order. There is still the issue that ASCII groups
+      all the uppercase letters before all the lowercase letters, so that, for example,
+      “earnest” will sort after “Frank.” But at least we have an alphabetical order of
+      byte values <em>within</em> the uppercase and lowercase groups.
     </p>
     <div class="sourceCode" id="cb1">
       <pre
@@ -331,28 +334,30 @@
     <p>
       Back to the larger problem: what happens if we add, say, “Élodie” to our list of
       names? A human will understand intuitively that E and É belong together as
-      variants of the same letter—perhaps with the accented version to come after the
+      variants of the same letter – perhaps with the accented version to come after the
       unaccented, alphabetically. But how can we establish this rigorously in a way that
-      facilitates automated sorting? The letter É has two main representations in
-      Unicode: either as a single character, <code>U+00C9</code>, for a Latin capital E
-      with an acute accent; or as a combination of two characters,
-      <code>U+0045</code> and <code>U+0301</code>, accounting for the base letter and
-      the accent, respectively. (I wanted to bring up the “decomposed representation” as
-      early as possible in this post, since it’s the form that we generally want for
-      Unicode sorting/collation. More on this later…)
+      facilitates automated sorting?
+    </p>
+    <p>
+      The letter É has two main representations in Unicode: either as a single
+      character, <code>U+00C9</code>, for a Latin capital E with an acute accent; or as
+      a combination of two characters, <code>U+0045</code> and <code>U+0301</code>,
+      accounting for the base letter and the accent, respectively. (The latter,
+      “decomposed” representation is the form that we generally want for Unicode
+      sorting/collation. More on this later…)
     </p>
     <p>
       Both of these representations will break the naïve approach to sorting, in their
       own ways. <code>C9</code> as a byte value is greater than any in the ASCII/Basic
       Latin table, meaning that “Élodie” would sort after, say, “Zardoz.” Using the
-      decomposed form seems promising—the first byte value is simply that of E,
-      appropriate for sorting—but the combining accent character introduces new
-      problems. <code>0x301</code>
-      is too large to be represented in a single byte, so in UTF-8 it becomes
-      <code>[CC, 81]</code>. “Élodie” in decomposed form is made up of seven code
-      points, in eight bytes in the common encoding, where we perceive only six letters.
-      It should be obvious how this would wreak havoc on a sorting algorithm that does
-      nothing more than array comparison on the byte values.
+      decomposed form seems promising – the first byte value is simply that of E,
+      appropriate for sorting – but the combining accent character introduces new
+      problems. <code>0x301</code> is too large to be represented in a single byte, so
+      in UTF-8 it becomes <code>[CC, 81]</code>. “Élodie” in decomposed form is made up
+      of seven code points, represented by eight bytes in the most common encoding,
+      whereas we perceive only six letters. It should be obvious how this would wreak
+      havoc on a sorting algorithm that does nothing more than array comparison on the
+      byte values.
     </p>
     <div class="sourceCode" id="cb2">
       <pre
@@ -360,7 +365,7 @@
       ><code class="sourceCode default"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a>Edgar</span>
 <span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a>Zardoz</span>
 <span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a>earnest</span>
-<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a>Élodie  # Assuming form NFC</span></code></pre>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a>Élodie  # Assuming U+00C9 for É</span></code></pre>
     </div>
     <p>
       <strong>We need something better.</strong> Unicode is a large and complex system,
@@ -377,34 +382,34 @@
     </p>
     <p>
       The central concept of Unicode collation is that one character might belong
-      before/after another character on different bases. They may represent
+      before/after another character <em>on different bases</em>. They may represent
       fundamentally different letters, like E and F; they may be different forms of
-      something understood to be the “same” letter, like E and É; or they may be closer
+      something understood as the “same” letter, like E and É; or they may be closer
       still, differing only in case, like E and e. Of course, languages and writing
       systems are extremely diverse, and not all of them even have a concept of
       uppercase vs. lowercase. But it turns out that allowing for a hierarchy of three
-      (or sometimes four) levels of collation difference between code points is
-      generally sufficient to get the job done.
+      (sometimes four) levels of collation difference between code points is generally
+      sufficient.
     </p>
     <p>
       In a writing system like the Latin alphabet, these levels are indeed organized as
-      I hinted above: the <em>primary</em> level of collation distinguishes among
+      I have suggested: the <em>primary</em> level of collation distinguishes among
       different base letters; the <em>secondary</em> level distinguishes among
       diacritics, like accents; and the <em>tertiary</em>
       level accounts for case differences. If we assign to each code point in the
       Unicode tables a set of primary, secondary, and tertiary
-      <em>collation weights</em>, we can then decide which of them sorts before the
-      other by comparing their weights one level at a time. And this can be extrapolated
-      to collate entire strings.
+      <strong>collation weights</strong>, we can place them in order by comparing their
+      weights one level at a time. And this can be extrapolated to collate entire
+      strings.
     </p>
     <p>
       Let’s look at some real examples from the
       <strong>Default Unicode Collation Element Table</strong> (<a
         href="https://www.unicode.org/Public/UCA/latest/allkeys.txt"
         >DUCET</a
-      >), one of the standard documents that Unicode publishes in order to make this
-      possible. NB, the following lines are not necessarily adjacent in the original;
-      I’m pulling examples from different areas.
+      >), one of the standard documents that Unicode publishes to make this system
+      possible. Please note, the following lines are not necessarily adjacent in the
+      original; I’m pulling examples from different areas.
     </p>
     <div class="sourceCode" id="cb3">
       <pre
@@ -421,8 +426,8 @@
       What we find in each line is the code point; a semicolon separator; one or more
       <em>sets of weights</em>, each consisting of primary, secondary, and tertiary
       parts; and a comment giving the official name of the Unicode scalar value.
-      <em>All numerical values are in hexadecimal.</em> We can look at one in greater
-      detail:
+      <em>All numerical values are in hexadecimal.</em> We can look at one entry in
+      greater detail:
     </p>
     <div class="sourceCode" id="cb4">
       <pre
@@ -433,13 +438,13 @@
     </div>
     <p>
       Hopefully you can see already where this is going. If we want to determine the
-      proper lexicographical order of two characters—to take the simplest scenario
-      possible—we can find their collation weights and compare them at the primary, then
-      the secondary, then the tertiary level, returning as soon as we find a difference.
-      Look, for example, at the respective weights of an ordinary capital letter X and
-      the “mathematical double-struck capital X,” i.e., the logo of the site formerly
-      known as Twitter. They differ only at the tertiary level: both belong to the X
-      family, and neither has a diacritic.
+      proper lexicographical order of two characters – to take the simplest scenario
+      possible – we can find their collation weights and compare them at the primary,
+      then the secondary, then the tertiary level, returning as soon as we find a
+      difference. For example, look at the respective weights of an ordinary capital
+      letter X and the “mathematical double-struck capital X,” i.e., the logo of the
+      site formerly known as Twitter. They differ only at the tertiary level: both
+      belong to the X family, and neither has a diacritic.
     </p>
     <div class="sourceCode" id="cb5">
       <pre
@@ -449,7 +454,7 @@
     </div>
     <p>
       The reality of Unicode collation ends up being significantly more complex than
-      this, but we can start on the happy path.
+      this, but we may as well start on the happy path.
     </p>
     <h2 id="simple-but-real-examples">Simple but Real Examples</h2>
     <h3 id="élodie-and-frank">Élodie and Frank</h3>
@@ -487,7 +492,7 @@
     <p>
       Since the first round of collation checking will be on the primary weights of
       these two words, we can pull those out and make a simpler array of primaries for
-      each word, called a <em>sort key</em>.
+      each word, called a <strong>sort key</strong>.
     </p>
     <p>
       It’s important to note that <em>only nonzero weights</em> are considered here. As
@@ -495,8 +500,8 @@
       ignore that zero when constructing the sort key. This is necessary so that, for
       example, two words like “Maria” and “María,” which differ only by an accent, are
       <em>identical</em> at the primary level. Allowing a zero primary weight for an
-      accent character to enter the sort key would immediately break collation. Anyway,
-      our primary-level sort keys for “Élodie” and “Frank” are as follows:
+      accent character to enter the sort key would break collation. Anyway, our
+      primary-level sort keys for “Élodie” and “Frank” are as follows:
     </p>
     <div class="sourceCode" id="cb8">
       <pre
@@ -506,7 +511,8 @@
     </div>
     <p>
       You don’t have to be a genius to figure this out. We’re back to straightforward
-      array comparison, and we can reach a decision at index 0: “Élodie” belongs first.
+      array comparison, and we can reach a decision at index <code>0</code>: “Élodie”
+      belongs first.
     </p>
     <h3 id="élodie-and-elodie">Élodie and Elodie</h3>
     <p>
@@ -531,8 +537,8 @@
     </div>
     <p>
       Now we see that “Élodie” has an extra element in its list of secondary weights,
-      and it is higher than the others. We reach a decision at index 1 in the secondary
-      sort key: “Elodie” (sans accent) belongs first.
+      and it is higher than the others. We reach a decision at index <code>1</code> in
+      the secondary sort key: “Elodie” (<em>sans</em> accent) belongs first.
     </p>
     <h3 id="frank-and-frank">Frank and frank</h3>
     <p>
@@ -570,13 +576,16 @@
       ><code class="sourceCode default"><span id="cb14-1"><a href="#cb14-1" aria-hidden="true" tabindex="-1"></a>[0008, 0002, 0002, 0002, 0002] # Frank (tertiary)</span>
 <span id="cb14-2"><a href="#cb14-2" aria-hidden="true" tabindex="-1"></a>[0002, 0002, 0002, 0002, 0002] # frank (tertiary)</span></code></pre>
     </div>
-    <p>At index 0 in the tertiary sort key, we see that “frank” belongs first.</p>
+    <p>
+      At index <code>0</code> in the tertiary sort key, we see that “frank” belongs
+      first.
+    </p>
     <p>
       <em
         >This is a noteworthy difference between the Unicode Collation Algorithm and
         ASCII sorting: the order of the cases is reversed! An implementation of the UCA
         can of course make this configurable; it’s trivial to set a flag and have
-        comparisons reversed at the tertiary level. But the difference in default
+        comparisons inverted at the tertiary level. But the difference in default
         behavior is interesting nonetheless.</em
       >
     </p>
@@ -590,8 +599,8 @@
     </p>
     <p>
       But I want to go on and show, in greater detail, what is actually involved in
-      writing a conformant implementation of the UCA—i.e., an implementation that passes
-      the punishingly rigorous
+      writing a conformant implementation of the UCA – i.e., an implementation that
+      passes the punishingly rigorous
       <a href="https://www.unicode.org/Public/UCA/latest/CollationTest.html"
         >conformance tests</a
       >
@@ -607,11 +616,11 @@
     <div class="sourceCode" id="cb15">
       <pre
         class="sourceCode zig"
-      ><code class="sourceCode zig"><span id="cb15-1"><a href="#cb15-1" aria-hidden="true" tabindex="-1"></a><span class="kw">pub</span> <span class="kw">fn</span> collateFallible(<span class="va">self</span><span class="op">:</span> <span class="op">*</span>Collator<span class="op">,</span> a<span class="op">:</span> []<span class="at">const</span> <span class="dt">u8</span><span class="op">,</span> b<span class="op">:</span> []<span class="at">const</span> <span class="dt">u8</span>) <span class="op">!</span>std<span class="op">.</span>math<span class="op">.</span>Order {</span>
+      ><code class="sourceCode zig"><span id="cb15-1"><a href="#cb15-1" aria-hidden="true" tabindex="-1"></a><span class="kw">pub</span> <span class="kw">fn</span> collate(<span class="va">self</span><span class="op">:</span> <span class="op">*</span>Collator<span class="op">,</span> a<span class="op">:</span> []<span class="at">const</span> <span class="dt">u8</span><span class="op">,</span> b<span class="op">:</span> []<span class="at">const</span> <span class="dt">u8</span>) <span class="op">!</span>std<span class="op">.</span>math<span class="op">.</span>Order {</span>
 <span id="cb15-2"><a href="#cb15-2" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> (std<span class="op">.</span>mem<span class="op">.</span>eql(<span class="dt">u8</span><span class="op">,</span> a<span class="op">,</span> b)) <span class="cf">return</span> <span class="op">.</span>eq;</span>
 <span id="cb15-3"><a href="#cb15-3" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb15-4"><a href="#cb15-4" aria-hidden="true" tabindex="-1"></a>    <span class="cf">try</span> decode<span class="op">.</span>bytesToCodepoints(<span class="op">&amp;</span><span class="va">self</span><span class="op">.</span>a_chars<span class="op">,</span> a);</span>
-<span id="cb15-5"><a href="#cb15-5" aria-hidden="true" tabindex="-1"></a>    <span class="cf">try</span> decode<span class="op">.</span>bytesToCodepoints(<span class="op">&amp;</span><span class="va">self</span><span class="op">.</span>b_chars<span class="op">,</span> b);</span>
+<span id="cb15-4"><a href="#cb15-4" aria-hidden="true" tabindex="-1"></a>    <span class="cf">try</span> decode<span class="op">.</span>bytesToCodepoints(<span class="va">self</span><span class="op">.</span>alloc<span class="op">,</span> <span class="op">&amp;</span><span class="va">self</span><span class="op">.</span>a_chars<span class="op">,</span> a);</span>
+<span id="cb15-5"><a href="#cb15-5" aria-hidden="true" tabindex="-1"></a>    <span class="cf">try</span> decode<span class="op">.</span>bytesToCodepoints(<span class="va">self</span><span class="op">.</span>alloc<span class="op">,</span> <span class="op">&amp;</span><span class="va">self</span><span class="op">.</span>b_chars<span class="op">,</span> b);</span>
 <span id="cb15-6"><a href="#cb15-6" aria-hidden="true" tabindex="-1"></a></span>
 <span id="cb15-7"><a href="#cb15-7" aria-hidden="true" tabindex="-1"></a>    <span class="co">// ASCII fast path</span></span>
 <span id="cb15-8"><a href="#cb15-8" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> (ascii<span class="op">.</span>tryAscii(<span class="va">self</span><span class="op">.</span>a_chars<span class="op">.</span>items<span class="op">,</span> <span class="va">self</span><span class="op">.</span>b_chars<span class="op">.</span>items)) <span class="op">|</span>ord<span class="op">|</span> <span class="cf">return</span> ord;</span>
@@ -619,21 +628,22 @@
 <span id="cb15-10"><a href="#cb15-10" aria-hidden="true" tabindex="-1"></a>    <span class="cf">try</span> normalize<span class="op">.</span>makeNFD(<span class="va">self</span><span class="op">,</span> <span class="op">&amp;</span><span class="va">self</span><span class="op">.</span>a_chars);</span>
 <span id="cb15-11"><a href="#cb15-11" aria-hidden="true" tabindex="-1"></a>    <span class="cf">try</span> normalize<span class="op">.</span>makeNFD(<span class="va">self</span><span class="op">,</span> <span class="op">&amp;</span><span class="va">self</span><span class="op">.</span>b_chars);</span>
 <span id="cb15-12"><a href="#cb15-12" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb15-13"><a href="#cb15-13" aria-hidden="true" tabindex="-1"></a>    <span class="at">const</span> offset <span class="op">=</span> <span class="cf">try</span> prefix<span class="op">.</span>findOffset(<span class="va">self</span>); <span class="co">// Default 0</span></span>
+<span id="cb15-13"><a href="#cb15-13" aria-hidden="true" tabindex="-1"></a>    <span class="at">const</span> offset <span class="op">=</span> prefix<span class="op">.</span>findOffset(<span class="va">self</span>); <span class="co">// Default 0</span></span>
 <span id="cb15-14"><a href="#cb15-14" aria-hidden="true" tabindex="-1"></a></span>
 <span id="cb15-15"><a href="#cb15-15" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Prefix trimming may reveal that one list is a prefix of the other</span></span>
 <span id="cb15-16"><a href="#cb15-16" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> (<span class="va">self</span><span class="op">.</span>a_chars<span class="op">.</span>items[offset<span class="op">..</span>]<span class="op">.</span>len <span class="op">==</span> <span class="dv">0</span> <span class="kw">or</span> <span class="va">self</span><span class="op">.</span>b_chars<span class="op">.</span>items[offset<span class="op">..</span>]<span class="op">.</span>len <span class="op">==</span> <span class="dv">0</span>) {</span>
-<span id="cb15-17"><a href="#cb15-17" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span> util<span class="op">.</span>cmp(<span class="dt">usize</span><span class="op">,</span> <span class="va">self</span><span class="op">.</span>a_chars<span class="op">.</span>items<span class="op">.</span>len<span class="op">,</span> <span class="va">self</span><span class="op">.</span>b_chars<span class="op">.</span>items<span class="op">.</span>len);</span>
-<span id="cb15-18"><a href="#cb15-18" aria-hidden="true" tabindex="-1"></a>    }</span>
-<span id="cb15-19"><a href="#cb15-19" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb15-20"><a href="#cb15-20" aria-hidden="true" tabindex="-1"></a>    <span class="cf">try</span> cea<span class="op">.</span>generateCEA(<span class="va">self</span><span class="op">,</span> offset<span class="op">,</span> <span class="cn">false</span>); <span class="co">// a</span></span>
-<span id="cb15-21"><a href="#cb15-21" aria-hidden="true" tabindex="-1"></a>    <span class="cf">try</span> cea<span class="op">.</span>generateCEA(<span class="va">self</span><span class="op">,</span> offset<span class="op">,</span> <span class="cn">true</span>); <span class="co">// b</span></span>
-<span id="cb15-22"><a href="#cb15-22" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb15-23"><a href="#cb15-23" aria-hidden="true" tabindex="-1"></a>    <span class="at">const</span> ord <span class="op">=</span> sort_key<span class="op">.</span>cmpIncremental(<span class="va">self</span><span class="op">.</span>a_cea<span class="op">.</span>items<span class="op">,</span> <span class="va">self</span><span class="op">.</span>b_cea<span class="op">.</span>items<span class="op">,</span> <span class="va">self</span><span class="op">.</span>shifting);</span>
-<span id="cb15-24"><a href="#cb15-24" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> (ord <span class="op">==</span> <span class="op">.</span>eq <span class="kw">and</span> <span class="va">self</span><span class="op">.</span>tiebreak) <span class="cf">return</span> util<span class="op">.</span>cmpArray(<span class="dt">u8</span><span class="op">,</span> a<span class="op">,</span> b);</span>
-<span id="cb15-25"><a href="#cb15-25" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb15-26"><a href="#cb15-26" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> ord;</span>
-<span id="cb15-27"><a href="#cb15-27" aria-hidden="true" tabindex="-1"></a>}</span></code></pre>
+<span id="cb15-17"><a href="#cb15-17" aria-hidden="true" tabindex="-1"></a>        <span class="at">const</span> prefixOrd <span class="op">=</span> util<span class="op">.</span>cmp(<span class="dt">usize</span><span class="op">,</span> <span class="va">self</span><span class="op">.</span>a_chars<span class="op">.</span>items<span class="op">.</span>len<span class="op">,</span> <span class="va">self</span><span class="op">.</span>b_chars<span class="op">.</span>items<span class="op">.</span>len);</span>
+<span id="cb15-18"><a href="#cb15-18" aria-hidden="true" tabindex="-1"></a>        <span class="cf">if</span> (prefixOrd <span class="op">!=</span> <span class="op">.</span>eq <span class="kw">or</span> <span class="op">!</span><span class="va">self</span><span class="op">.</span>tiebreak) <span class="cf">return</span> prefixOrd;</span>
+<span id="cb15-19"><a href="#cb15-19" aria-hidden="true" tabindex="-1"></a>    }</span>
+<span id="cb15-20"><a href="#cb15-20" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb15-21"><a href="#cb15-21" aria-hidden="true" tabindex="-1"></a>    <span class="cf">try</span> cea<span class="op">.</span>generateCEA(<span class="va">self</span><span class="op">,</span> offset<span class="op">,</span> <span class="cn">false</span>); <span class="co">// a</span></span>
+<span id="cb15-22"><a href="#cb15-22" aria-hidden="true" tabindex="-1"></a>    <span class="cf">try</span> cea<span class="op">.</span>generateCEA(<span class="va">self</span><span class="op">,</span> offset<span class="op">,</span> <span class="cn">true</span>); <span class="co">// b</span></span>
+<span id="cb15-23"><a href="#cb15-23" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb15-24"><a href="#cb15-24" aria-hidden="true" tabindex="-1"></a>    <span class="at">const</span> ord <span class="op">=</span> sort_key<span class="op">.</span>cmpIncremental(<span class="va">self</span><span class="op">.</span>a_cea<span class="op">.</span>items<span class="op">,</span> <span class="va">self</span><span class="op">.</span>b_cea<span class="op">.</span>items<span class="op">,</span> <span class="va">self</span><span class="op">.</span>shifting);</span>
+<span id="cb15-25"><a href="#cb15-25" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> (ord <span class="op">==</span> <span class="op">.</span>eq <span class="kw">and</span> <span class="va">self</span><span class="op">.</span>tiebreak) <span class="cf">return</span> util<span class="op">.</span>cmpArray(<span class="dt">u8</span><span class="op">,</span> a<span class="op">,</span> b);</span>
+<span id="cb15-26"><a href="#cb15-26" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb15-27"><a href="#cb15-27" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> ord;</span>
+<span id="cb15-28"><a href="#cb15-28" aria-hidden="true" tabindex="-1"></a>}</span></code></pre>
     </div>
     <p>
       This can be broken down into eight steps, some of them quite simple, others
@@ -657,34 +667,35 @@
       <li>
         <p>
           If we need to continue with the UCA proper, begin by ensuring that both
-          strings have all their characters in the canonical decomposed form, i.e.,
-          <a href="https://en.wikipedia.org/wiki/Unicode_equivalence#Normalization"
+          strings have all their characters in the canonical decomposed form, known as
+          <a href="https://en.wikipedia.org/wiki/Unicode_equivalence#Normal_forms"
             >NFD</a
-          >.
+          >
+          for short.
         </p>
       </li>
       <li>
         <p>
-          Check if the two strings have a prefix in common that can safely be ignored in
+          Check if the two strings share a prefix that can safely be ignored in
           collation. Doing this while conforming to the standard is more difficult than
-          it seems, for reasons that I may not even be able to cover in this post.
+          it seems, for reasons that I may not be able to cover fully in this post.
           Prefix trimming can sometimes produce a collation result on its own, if one
           string turns out to be a prefix of the other.
         </p>
       </li>
       <li>
         <p>
-          Generate the <em>collation element array</em>. This process is by far the most
-          complex part of the UCA. It corresponds to the step shown above (in a very
-          basic case), where we looked up the collation weights associated with each
-          code point in each of the strings being compared. There are many subtleties to
-          consider here; I’ll get into it below.
+          Generate the <strong>collation element array</strong>. This process is by far
+          the most complex part of the UCA. It corresponds to the step shown above (in a
+          very basic case), where we looked up the collation weights associated with
+          each code point in each of the strings being compared. There are many
+          subtleties to consider here; we’ll dig into it below.
         </p>
       </li>
       <li>
         <p>
-          Process the collation element arrays into <em>sort keys</em>, checking one
-          level at a time until a result is yielded. By this point, most of the hard
+          Process the collation element arrays into <strong>sort keys</strong>, checking
+          one level at a time until a result is yielded. By this point, most of the hard
           work has been done.
         </p>
       </li>
@@ -696,71 +707,83 @@
       </li>
     </ol>
     <p>
-      We can look at these steps one-by-one—at least, in those cases where there’s
-      anything worth saying. One fun part of implementing the UCA in Zig was that I
-      chose not to use any dependencies outside of the standard library. So I dealt with
-      problems like UTF-8 validation and decoding and NFD normalization in my own code.
-      I’ll show snippets of how these components work. Still, the main focus will be on
-      the core logic of the UCA.
+      We can look at these steps one-by-one – at least, for steps where there’s anything
+      worth saying. One fun part of implementing the UCA in Zig was that I opted not to
+      use any dependencies outside the standard library. So I dealt with problems like
+      UTF-8 validation and decoding and NFD normalization in my own code. I’ll show
+      snippets of how these components work. Still, the main focus will be on the core
+      logic of the UCA.
     </p>
     <h2 id="from-utf-8-to-code-points">From UTF-8 to Code Points</h2>
     <p>
-      I don’t have a lot to say here, since UTF-8 validation/decoding is a
-      well-understood problem with many solutions available in the public domain. The
-      one that I chose to adapt to Zig, however, is probably one of the most elegant
-      pieces of code I’ve ever seen. It’s a famous UTF-8 decoder written in C by Björn
-      Höhrmann, subsequently improved by Rich Felker (creator/maintainer of musl).
+      UTF-8 validation/decoding is a well-understood problem with many solutions
+      available in the public domain. The one that I chose to adapt to Zig, however, is
+      probably one of the most elegant pieces of code I’ve ever seen. It’s a famous
+      UTF-8 decoder written in C
+      <a href="https://bjoern.hoehrmann.de/utf-8/decoder/dfa/">by Björn Höhrmann</a>,
+      subsequently improved by Rich Felker (creator/maintainer of musl).
     </p>
     <p>
-      This decoder is based on a deterministic finite automaton, i.e., a state machine,
-      wherein each byte of UTF-8 that is encountered causes a certain state transition.
-      There is a “home state,” or an “accept state,” which is reached each time that a
-      full code point has been processed. This can happen, of course, after anything
-      from one to four bytes.
+      This decoder is based on a
+      <a href="https://en.wikipedia.org/wiki/Deterministic_finite_automaton"
+        >deterministic finite automaton</a
+      >, i.e., a state machine, wherein each byte of UTF-8 that is encountered causes a
+      certain state transition. There is a “home state,” or an
+      <code>ACCEPT</code> state, which is reached each time that a full code point has
+      been processed. Given the design of UTF-8, this can happen after anything from one
+      to four bytes.
     </p>
     <p>
-      Any invalid sequence brings the DFA into a “reject state,” which is normally
-      handled by having the decoder emit the “Unicode replacement character,”
+      Any invalid sequence brings the DFA into a <code>REJECT</code> state, which is
+      normally handled by having the decoder emit the “Unicode replacement character,”
       <code>U+FFFD</code>. What I find brilliant, though, is that validation of UTF-8
       sequences is accomplished hand-in-hand with determining the code points. That is,
-      each time that the DFA reaches the “accept state,” the function also has access to
-      the value of the code point that has just been completed. For a case like Unicode
-      normalization, this is perfect: what we want for the algorithm is a list of code
-      points in <code>u32</code> (or <code>u21</code>, but you get the idea). Below you
-      can see what I mean; I’ve added some comments for clarity. This comes from
-      <code>src/decode.zig</code>:
+      each time that the DFA reaches <code>ACCEPT</code>, the function also has access
+      to the <em>value of the code point</em> that has just been completed.
+    </p>
+    <p>
+      For a case like Unicode normalization, this is perfect: what we want for the
+      algorithm is a list of code points in <code>u32</code> (or <code>u21</code>, but
+      you get the idea). Below you can see what I mean; I’ve added some comments for
+      clarity. This comes from <code>src/decode.zig</code>:
     </p>
     <div class="sourceCode" id="cb16">
       <pre
         class="sourceCode zig"
-      ><code class="sourceCode zig"><span id="cb16-1"><a href="#cb16-1" aria-hidden="true" tabindex="-1"></a><span class="kw">pub</span> <span class="kw">fn</span> bytesToCodepoints(codepoints<span class="op">:</span> <span class="op">*</span>std<span class="op">.</span>ArrayList(<span class="dt">u32</span>)<span class="op">,</span> input<span class="op">:</span> []<span class="at">const</span> <span class="dt">u8</span>) <span class="op">!</span><span class="dt">void</span> {</span>
-<span id="cb16-2"><a href="#cb16-2" aria-hidden="true" tabindex="-1"></a>   <span class="co">// For performance reasons, we keep reusing a list of code points</span></span>
-<span id="cb16-3"><a href="#cb16-3" aria-hidden="true" tabindex="-1"></a>   codepoints<span class="op">.</span>clearRetainingCapacity();</span>
-<span id="cb16-4"><a href="#cb16-4" aria-hidden="true" tabindex="-1"></a>   <span class="cf">try</span> codepoints<span class="op">.</span>ensureTotalCapacity(input<span class="op">.</span>len);</span>
-<span id="cb16-5"><a href="#cb16-5" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb16-6"><a href="#cb16-6" aria-hidden="true" tabindex="-1"></a>   <span class="co">// Start with the &quot;accept state&quot; and 0 code point value</span></span>
-<span id="cb16-7"><a href="#cb16-7" aria-hidden="true" tabindex="-1"></a>   <span class="at">var</span> state<span class="op">:</span> <span class="dt">u8</span> <span class="op">=</span> UTF8_ACCEPT;</span>
-<span id="cb16-8"><a href="#cb16-8" aria-hidden="true" tabindex="-1"></a>   <span class="at">var</span> codepoint<span class="op">:</span> <span class="dt">u32</span> <span class="op">=</span> <span class="dv">0</span>;</span>
+      ><code class="sourceCode zig"><span id="cb16-1"><a href="#cb16-1" aria-hidden="true" tabindex="-1"></a><span class="kw">pub</span> <span class="kw">fn</span> bytesToCodepoints(</span>
+<span id="cb16-2"><a href="#cb16-2" aria-hidden="true" tabindex="-1"></a>    alloc<span class="op">:</span> std<span class="op">.</span>mem<span class="op">.</span>Allocator<span class="op">,</span></span>
+<span id="cb16-3"><a href="#cb16-3" aria-hidden="true" tabindex="-1"></a>    codepoints<span class="op">:</span> <span class="op">*</span>std<span class="op">.</span>ArrayList(<span class="dt">u32</span>)<span class="op">,</span></span>
+<span id="cb16-4"><a href="#cb16-4" aria-hidden="true" tabindex="-1"></a>    input<span class="op">:</span> []<span class="at">const</span> <span class="dt">u8</span><span class="op">,</span></span>
+<span id="cb16-5"><a href="#cb16-5" aria-hidden="true" tabindex="-1"></a>) <span class="op">!</span><span class="dt">void</span> {</span>
+<span id="cb16-6"><a href="#cb16-6" aria-hidden="true" tabindex="-1"></a>    <span class="co">// For performance reasons, we reuse the code points list</span></span>
+<span id="cb16-7"><a href="#cb16-7" aria-hidden="true" tabindex="-1"></a>    codepoints<span class="op">.</span>clearRetainingCapacity();</span>
+<span id="cb16-8"><a href="#cb16-8" aria-hidden="true" tabindex="-1"></a>    <span class="cf">try</span> codepoints<span class="op">.</span>ensureTotalCapacity(alloc<span class="op">,</span> input<span class="op">.</span>len);</span>
 <span id="cb16-9"><a href="#cb16-9" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb16-10"><a href="#cb16-10" aria-hidden="true" tabindex="-1"></a>   <span class="co">// Iterate over bytes of the string</span></span>
-<span id="cb16-11"><a href="#cb16-11" aria-hidden="true" tabindex="-1"></a>   <span class="cf">for</span> (input) <span class="op">|</span>b<span class="op">|</span> {</span>
-<span id="cb16-12"><a href="#cb16-12" aria-hidden="true" tabindex="-1"></a>      <span class="co">// Get the next state and updated code point value</span></span>
-<span id="cb16-13"><a href="#cb16-13" aria-hidden="true" tabindex="-1"></a>      <span class="at">const</span> new_state <span class="op">=</span> decode(<span class="op">&amp;</span>state<span class="op">,</span> <span class="op">&amp;</span>codepoint<span class="op">,</span> b);</span>
-<span id="cb16-14"><a href="#cb16-14" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb16-15"><a href="#cb16-15" aria-hidden="true" tabindex="-1"></a>      <span class="co">// If we reached an &quot;end state,&quot; handle it</span></span>
-<span id="cb16-16"><a href="#cb16-16" aria-hidden="true" tabindex="-1"></a>      <span class="cf">if</span> (new_state <span class="op">==</span> UTF8_REJECT) {</span>
-<span id="cb16-17"><a href="#cb16-17" aria-hidden="true" tabindex="-1"></a>         codepoints<span class="op">.</span>appendAssumeCapacity(REPLACEMENT);</span>
-<span id="cb16-18"><a href="#cb16-18" aria-hidden="true" tabindex="-1"></a>         state <span class="op">=</span> UTF8_ACCEPT;</span>
-<span id="cb16-19"><a href="#cb16-19" aria-hidden="true" tabindex="-1"></a>      } <span class="cf">else</span> <span class="cf">if</span> (new_state <span class="op">==</span> UTF8_ACCEPT) {</span>
-<span id="cb16-20"><a href="#cb16-20" aria-hidden="true" tabindex="-1"></a>         codepoints<span class="op">.</span>appendAssumeCapacity(codepoint);</span>
-<span id="cb16-21"><a href="#cb16-21" aria-hidden="true" tabindex="-1"></a>      }</span>
-<span id="cb16-22"><a href="#cb16-22" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb16-23"><a href="#cb16-23" aria-hidden="true" tabindex="-1"></a>      <span class="co">// Otherwise continue to the next byte (of a multi-byte character)</span></span>
-<span id="cb16-24"><a href="#cb16-24" aria-hidden="true" tabindex="-1"></a>   }</span>
-<span id="cb16-25"><a href="#cb16-25" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb16-26"><a href="#cb16-26" aria-hidden="true" tabindex="-1"></a>   <span class="co">// If we ended in an incomplete sequence, emit replacement</span></span>
-<span id="cb16-27"><a href="#cb16-27" aria-hidden="true" tabindex="-1"></a>   <span class="cf">if</span> (state <span class="op">!=</span> UTF8_ACCEPT) codepoints<span class="op">.</span>appendAssumeCapacity(REPLACEMENT);</span>
-<span id="cb16-28"><a href="#cb16-28" aria-hidden="true" tabindex="-1"></a>}</span></code></pre>
+<span id="cb16-10"><a href="#cb16-10" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Start with the &quot;accept state&quot; and 0 code point value</span></span>
+<span id="cb16-11"><a href="#cb16-11" aria-hidden="true" tabindex="-1"></a>    <span class="at">var</span> state<span class="op">:</span> <span class="dt">u8</span> <span class="op">=</span> UTF8_ACCEPT;</span>
+<span id="cb16-12"><a href="#cb16-12" aria-hidden="true" tabindex="-1"></a>    <span class="at">var</span> codepoint<span class="op">:</span> <span class="dt">u32</span> <span class="op">=</span> <span class="dv">0</span>;</span>
+<span id="cb16-13"><a href="#cb16-13" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb16-14"><a href="#cb16-14" aria-hidden="true" tabindex="-1"></a>    <span class="at">var</span> i<span class="op">:</span> <span class="dt">usize</span> <span class="op">=</span> <span class="dv">0</span>;</span>
+<span id="cb16-15"><a href="#cb16-15" aria-hidden="true" tabindex="-1"></a>    <span class="cf">while</span> (i <span class="op">&lt;</span> input<span class="op">.</span>len) {</span>
+<span id="cb16-16"><a href="#cb16-16" aria-hidden="true" tabindex="-1"></a>        <span class="at">const</span> prev_state <span class="op">=</span> state;</span>
+<span id="cb16-17"><a href="#cb16-17" aria-hidden="true" tabindex="-1"></a>        <span class="at">const</span> new_state <span class="op">=</span> decode(<span class="op">&amp;</span>state<span class="op">,</span> <span class="op">&amp;</span>codepoint<span class="op">,</span> input[i]);</span>
+<span id="cb16-18"><a href="#cb16-18" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb16-19"><a href="#cb16-19" aria-hidden="true" tabindex="-1"></a>        <span class="co">// If we reached an &quot;end state,&quot; handle it</span></span>
+<span id="cb16-20"><a href="#cb16-20" aria-hidden="true" tabindex="-1"></a>        <span class="cf">if</span> (new_state <span class="op">==</span> UTF8_REJECT) {</span>
+<span id="cb16-21"><a href="#cb16-21" aria-hidden="true" tabindex="-1"></a>            codepoints<span class="op">.</span>appendAssumeCapacity(REPLACEMENT);</span>
+<span id="cb16-22"><a href="#cb16-22" aria-hidden="true" tabindex="-1"></a>            state <span class="op">=</span> UTF8_ACCEPT;</span>
+<span id="cb16-23"><a href="#cb16-23" aria-hidden="true" tabindex="-1"></a>            <span class="cf">if</span> (prev_state <span class="op">!=</span> UTF8_ACCEPT) <span class="cf">continue</span>; <span class="co">// Retry same byte</span></span>
+<span id="cb16-24"><a href="#cb16-24" aria-hidden="true" tabindex="-1"></a>        } <span class="cf">else</span> <span class="cf">if</span> (new_state <span class="op">==</span> UTF8_ACCEPT) {</span>
+<span id="cb16-25"><a href="#cb16-25" aria-hidden="true" tabindex="-1"></a>            codepoints<span class="op">.</span>appendAssumeCapacity(codepoint);</span>
+<span id="cb16-26"><a href="#cb16-26" aria-hidden="true" tabindex="-1"></a>        }</span>
+<span id="cb16-27"><a href="#cb16-27" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb16-28"><a href="#cb16-28" aria-hidden="true" tabindex="-1"></a>        <span class="co">// Otherwise continue to the next byte (of a multi-byte character)</span></span>
+<span id="cb16-29"><a href="#cb16-29" aria-hidden="true" tabindex="-1"></a>        i <span class="op">+=</span> <span class="dv">1</span>;</span>
+<span id="cb16-30"><a href="#cb16-30" aria-hidden="true" tabindex="-1"></a>    }</span>
+<span id="cb16-31"><a href="#cb16-31" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb16-32"><a href="#cb16-32" aria-hidden="true" tabindex="-1"></a>    <span class="co">// If we ended in an incomplete sequence, emit replacement</span></span>
+<span id="cb16-33"><a href="#cb16-33" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> (state <span class="op">!=</span> UTF8_ACCEPT) codepoints<span class="op">.</span>appendAssumeCapacity(REPLACEMENT);</span>
+<span id="cb16-34"><a href="#cb16-34" aria-hidden="true" tabindex="-1"></a>}</span></code></pre>
     </div>
     <p>
       I’ve left out the <code>decode</code> function, but you can look into this further
@@ -776,39 +799,44 @@
         >example</a
       >), and at least one academic paper, on the subject of maximizing performance in
       UTF-8 validation/decoding. But Höhrmann’s decoder continues to be popular because
-      it’s good enough, easy to understand, and elegant. Everyone should give it a try
-      at some point.
+      it’s good enough, easy to understand, and æsthetically pleasing. Everyone should
+      give it a try at some point.
     </p>
     <h2 id="nfd-normalization">NFD Normalization</h2>
     <p>
       As I mentioned earlier, Unicode collation requires that the characters in each
-      string be <em>decomposed</em> and <em>in canonical order</em>. This means that any
-      code point that is considered (per the Unicode standard) to be a composition of
-      multiple other, lower-level code points must be broken down into those. I gave a
-      simple example: “É,” the Latin-script capital E with an acute accent. This letter
-      can be, and most often is, represented by the single code point
-      <code>U+00C9</code>. In fact, the great majority of digital text that we encounter
-      these days is in the UTF-8 encoding and in form NFC, i.e., with characters
-      <em>composed</em> into shorter representations where possible, and upholding
-      <em>canonical equivalence</em>. (That is, characters that are considered
-      equivalent are guaranteed to be represented the same way in form NFC.)
+      string be <strong>decomposed</strong> and <strong>in canonical order</strong>.
+      This means that any code point that is considered (per the Unicode standard) to be
+      a composition of multiple other, lower-level code points must be broken down into
+      those.
     </p>
     <p>
-      Back to “É,” though: it can also be represented via two code points,
+      We’ve seen a simple example: “É,” the Latin-script capital E with an acute accent.
+      This letter can be, and most often is, represented by the single code point
+      <code>U+00C9</code>. In fact, the great majority of digital text that we encounter
+      these days is in the UTF-8 encoding and in form
+      <a href="https://en.wikipedia.org/wiki/Unicode_equivalence#Normal_forms">NFC</a>,
+      i.e., with characters <em>composed</em> into shorter representations where
+      possible, and upholding <em>canonical equivalence</em>. (That is, characters that
+      are considered equivalent are guaranteed to be represented the same way in form
+      NFC.)
+    </p>
+    <p>
+      Returning to “É,” it can also be represented via two code points,
       <code>U+0045</code> for the capital letter E, and <code>U+0301</code> for the
       combining acute accent. This is another canonical Unicode form, called NFD. I’m
       sure you get the idea, at least in a basic sense. Whereas NFC has composed
       characters, NFD has them decomposed and with the constituent parts in a standard
-      order. You can perhaps also understand how this is helpful—necessary, in fact—for
-      proper sorting. Breaking down “É” into “E followed by an acute accent” is what
+      order. You can perhaps also understand how this is helpful – necessary, in fact –
+      for proper sorting. Breaking down “É” into “E followed by an acute accent” is what
       allowed us to derive identical sort keys for “Élodie” and “Elodie” at the primary
       level, and for the accent to make the collation decision between the two words at
       just the right spot (i.e., just after the initial letter/index).
     </p>
     <p>
-      I worry this discussion could become dense, but on some level it should be
-      straightforward enough. We deal with mostly NFC text data in the wild, and we need
-      to convert to NFD to apply the Unicode Collation Algorithm. How can we do that? It
+      We risk going down the rabbit hole, but the main point here should be
+      straightforward enough. Most text data in the wild is in form NFC, and we need to
+      convert to NFD to apply the Unicode Collation Algorithm. How can we do that? It
       ends up being one of those problems that teaches you a lot about the Unicode
       standard if you want to write your own implementation. This is because you need to
       be able to determine, for any code point, what its canonical decomposition is (if
@@ -821,17 +849,18 @@
       <pre
         class="sourceCode zig"
       ><code class="sourceCode zig"><span id="cb17-1"><a href="#cb17-1" aria-hidden="true" tabindex="-1"></a><span class="kw">pub</span> <span class="kw">fn</span> makeNFD(coll<span class="op">:</span> <span class="op">*</span>Collator<span class="op">,</span> input<span class="op">:</span> <span class="op">*</span>std<span class="op">.</span>ArrayList(<span class="dt">u32</span>)) <span class="op">!</span><span class="dt">void</span> {</span>
-<span id="cb17-2"><a href="#cb17-2" aria-hidden="true" tabindex="-1"></a>   <span class="cf">if</span> (<span class="cf">try</span> fcd(coll<span class="op">,</span> input<span class="op">.</span>items)) <span class="cf">return</span>;</span>
+<span id="cb17-2"><a href="#cb17-2" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> (fcd(coll<span class="op">,</span> input<span class="op">.</span>items)) <span class="cf">return</span>;</span>
 <span id="cb17-3"><a href="#cb17-3" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb17-4"><a href="#cb17-4" aria-hidden="true" tabindex="-1"></a>   <span class="cf">try</span> decompose(coll<span class="op">,</span> input);</span>
-<span id="cb17-5"><a href="#cb17-5" aria-hidden="true" tabindex="-1"></a>   reorder(input<span class="op">.</span>items);</span>
+<span id="cb17-4"><a href="#cb17-4" aria-hidden="true" tabindex="-1"></a>    <span class="cf">try</span> decompose(coll<span class="op">,</span> input);</span>
+<span id="cb17-5"><a href="#cb17-5" aria-hidden="true" tabindex="-1"></a>    reorder(input<span class="op">.</span>items);</span>
 <span id="cb17-6"><a href="#cb17-6" aria-hidden="true" tabindex="-1"></a>}</span></code></pre>
     </div>
     <p>
       As you can see, we have a short <code>makeNFD</code> function that does three
-      things. First, it checks whether the input meets certain criteria that obviate the
-      need for any decomposition. (FCD is short for “fast NFC/NFD.”) We can set aside
-      the details of this part for the time being. Second, in case NFD conversion
+      things. First, it checks whether the input meets
+      <a href="https://www.unicode.org/notes/tn5/#FCD">certain criteria</a> that obviate
+      the need for any decomposition. (FCD is short for “fast NFC/NFD.”) We can set
+      aside the details of this part for the time being. Second, in case NFD conversion
       <em>is</em> needed, we decompose the input code points. Finally, we ensure that
       the decomposed code points are in their canonical ordering.
     </p>
@@ -843,84 +872,88 @@
       <pre
         class="sourceCode zig"
       ><code class="sourceCode zig"><span id="cb18-1"><a href="#cb18-1" aria-hidden="true" tabindex="-1"></a><span class="kw">fn</span> decompose(coll<span class="op">:</span> <span class="op">*</span>Collator<span class="op">,</span> input<span class="op">:</span> <span class="op">*</span>std<span class="op">.</span>ArrayList(<span class="dt">u32</span>)) <span class="op">!</span><span class="dt">void</span> {</span>
-<span id="cb18-2"><a href="#cb18-2" aria-hidden="true" tabindex="-1"></a>   <span class="at">var</span> i<span class="op">:</span> <span class="dt">usize</span> <span class="op">=</span> <span class="dv">0</span>;</span>
+<span id="cb18-2"><a href="#cb18-2" aria-hidden="true" tabindex="-1"></a>    <span class="at">var</span> i<span class="op">:</span> <span class="dt">usize</span> <span class="op">=</span> <span class="dv">0</span>;</span>
 <span id="cb18-3"><a href="#cb18-3" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb18-4"><a href="#cb18-4" aria-hidden="true" tabindex="-1"></a>   <span class="co">// We need to manage i manually in this loop</span></span>
-<span id="cb18-5"><a href="#cb18-5" aria-hidden="true" tabindex="-1"></a>   <span class="cf">while</span> (i <span class="op">&lt;</span> input<span class="op">.</span>items<span class="op">.</span>len) {</span>
-<span id="cb18-6"><a href="#cb18-6" aria-hidden="true" tabindex="-1"></a>      <span class="at">const</span> code_point <span class="op">=</span> input<span class="op">.</span>items[i];</span>
-<span id="cb18-7"><a href="#cb18-7" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb18-8"><a href="#cb18-8" aria-hidden="true" tabindex="-1"></a>      <span class="co">// Code points below a certain value never require decomposition</span></span>
-<span id="cb18-9"><a href="#cb18-9" aria-hidden="true" tabindex="-1"></a>      <span class="cf">if</span> (code_point <span class="op">&lt;</span> <span class="dv">0</span><span class="er">xC0</span>) {</span>
-<span id="cb18-10"><a href="#cb18-10" aria-hidden="true" tabindex="-1"></a>         i <span class="op">+=</span> <span class="dv">1</span>;</span>
-<span id="cb18-11"><a href="#cb18-11" aria-hidden="true" tabindex="-1"></a>         <span class="cf">continue</span>;</span>
-<span id="cb18-12"><a href="#cb18-12" aria-hidden="true" tabindex="-1"></a>      }</span>
-<span id="cb18-13"><a href="#cb18-13" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb18-14"><a href="#cb18-14" aria-hidden="true" tabindex="-1"></a>      <span class="co">// Certain Korean text requires special handling; don&#39;t ask</span></span>
-<span id="cb18-15"><a href="#cb18-15" aria-hidden="true" tabindex="-1"></a>      <span class="cf">if</span> (<span class="dv">0</span><span class="er">xAC00</span> <span class="op">&lt;=</span> code_point <span class="kw">and</span> code_point <span class="op">&lt;=</span> <span class="dv">0</span><span class="er">xD7A3</span>) {</span>
-<span id="cb18-16"><a href="#cb18-16" aria-hidden="true" tabindex="-1"></a>         <span class="at">const</span> len<span class="op">,</span> <span class="at">const</span> arr <span class="op">=</span> decomposeJamo(code_point);</span>
-<span id="cb18-17"><a href="#cb18-17" aria-hidden="true" tabindex="-1"></a>         <span class="cf">try</span> input<span class="op">.</span>replaceRange(i<span class="op">,</span> <span class="dv">1</span><span class="op">,</span> arr[<span class="dv">0</span><span class="op">..</span>len]);</span>
-<span id="cb18-18"><a href="#cb18-18" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb18-19"><a href="#cb18-19" aria-hidden="true" tabindex="-1"></a>         i <span class="op">+=</span> len;</span>
-<span id="cb18-20"><a href="#cb18-20" aria-hidden="true" tabindex="-1"></a>         <span class="cf">continue</span>;</span>
-<span id="cb18-21"><a href="#cb18-21" aria-hidden="true" tabindex="-1"></a>      }</span>
-<span id="cb18-22"><a href="#cb18-22" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb18-23"><a href="#cb18-23" aria-hidden="true" tabindex="-1"></a>      <span class="co">// If a canonical decomposition exists for this code point, apply it</span></span>
-<span id="cb18-24"><a href="#cb18-24" aria-hidden="true" tabindex="-1"></a>      <span class="cf">if</span> (<span class="cf">try</span> coll<span class="op">.</span>getDecomp(code_point)) <span class="op">|</span>decomp<span class="op">|</span> {</span>
-<span id="cb18-25"><a href="#cb18-25" aria-hidden="true" tabindex="-1"></a>         <span class="cf">try</span> input<span class="op">.</span>replaceRange(i<span class="op">,</span> <span class="dv">1</span><span class="op">,</span> decomp);</span>
-<span id="cb18-26"><a href="#cb18-26" aria-hidden="true" tabindex="-1"></a>         i <span class="op">+=</span> decomp<span class="op">.</span>len;</span>
-<span id="cb18-27"><a href="#cb18-27" aria-hidden="true" tabindex="-1"></a>         <span class="cf">continue</span>;</span>
-<span id="cb18-28"><a href="#cb18-28" aria-hidden="true" tabindex="-1"></a>      }</span>
-<span id="cb18-29"><a href="#cb18-29" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb18-30"><a href="#cb18-30" aria-hidden="true" tabindex="-1"></a>      i <span class="op">+=</span> <span class="dv">1</span>;</span>
-<span id="cb18-31"><a href="#cb18-31" aria-hidden="true" tabindex="-1"></a>   }</span>
-<span id="cb18-32"><a href="#cb18-32" aria-hidden="true" tabindex="-1"></a>}</span></code></pre>
+<span id="cb18-4"><a href="#cb18-4" aria-hidden="true" tabindex="-1"></a>    <span class="cf">while</span> (i <span class="op">&lt;</span> input<span class="op">.</span>items<span class="op">.</span>len) {</span>
+<span id="cb18-5"><a href="#cb18-5" aria-hidden="true" tabindex="-1"></a>        <span class="at">const</span> code_point <span class="op">=</span> input<span class="op">.</span>items[i];</span>
+<span id="cb18-6"><a href="#cb18-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb18-7"><a href="#cb18-7" aria-hidden="true" tabindex="-1"></a>        <span class="co">// Code points below a certain value never require decomposition</span></span>
+<span id="cb18-8"><a href="#cb18-8" aria-hidden="true" tabindex="-1"></a>        <span class="cf">if</span> (code_point <span class="op">&lt;</span> <span class="dv">0</span><span class="er">xC0</span>) {</span>
+<span id="cb18-9"><a href="#cb18-9" aria-hidden="true" tabindex="-1"></a>            i <span class="op">+=</span> <span class="dv">1</span>;</span>
+<span id="cb18-10"><a href="#cb18-10" aria-hidden="true" tabindex="-1"></a>            <span class="cf">continue</span>;</span>
+<span id="cb18-11"><a href="#cb18-11" aria-hidden="true" tabindex="-1"></a>        }</span>
+<span id="cb18-12"><a href="#cb18-12" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb18-13"><a href="#cb18-13" aria-hidden="true" tabindex="-1"></a>        <span class="co">// Certain Korean text requires special handling; don&#39;t ask</span></span>
+<span id="cb18-14"><a href="#cb18-14" aria-hidden="true" tabindex="-1"></a>        <span class="cf">if</span> (<span class="dv">0</span><span class="er">xAC00</span> <span class="op">&lt;=</span> code_point <span class="kw">and</span> code_point <span class="op">&lt;=</span> <span class="dv">0</span><span class="er">xD7A3</span>) {</span>
+<span id="cb18-15"><a href="#cb18-15" aria-hidden="true" tabindex="-1"></a>            <span class="at">const</span> len<span class="op">,</span> <span class="at">const</span> arr <span class="op">=</span> decomposeJamo(code_point);</span>
+<span id="cb18-16"><a href="#cb18-16" aria-hidden="true" tabindex="-1"></a>            <span class="cf">try</span> input<span class="op">.</span>replaceRange(coll<span class="op">.</span>alloc<span class="op">,</span> i<span class="op">,</span> <span class="dv">1</span><span class="op">,</span> arr[<span class="dv">0</span><span class="op">..</span>len]);</span>
+<span id="cb18-17"><a href="#cb18-17" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb18-18"><a href="#cb18-18" aria-hidden="true" tabindex="-1"></a>            i <span class="op">+=</span> len;</span>
+<span id="cb18-19"><a href="#cb18-19" aria-hidden="true" tabindex="-1"></a>            <span class="cf">continue</span>;</span>
+<span id="cb18-20"><a href="#cb18-20" aria-hidden="true" tabindex="-1"></a>        }</span>
+<span id="cb18-21"><a href="#cb18-21" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb18-22"><a href="#cb18-22" aria-hidden="true" tabindex="-1"></a>        <span class="co">// If a canonical decomposition exists for this code point, apply it</span></span>
+<span id="cb18-23"><a href="#cb18-23" aria-hidden="true" tabindex="-1"></a>        <span class="cf">if</span> (coll<span class="op">.</span>getDecomp(code_point)) <span class="op">|</span>decomp<span class="op">|</span> {</span>
+<span id="cb18-24"><a href="#cb18-24" aria-hidden="true" tabindex="-1"></a>            <span class="cf">try</span> input<span class="op">.</span>replaceRange(coll<span class="op">.</span>alloc<span class="op">,</span> i<span class="op">,</span> <span class="dv">1</span><span class="op">,</span> decomp);</span>
+<span id="cb18-25"><a href="#cb18-25" aria-hidden="true" tabindex="-1"></a>            i <span class="op">+=</span> decomp<span class="op">.</span>len;</span>
+<span id="cb18-26"><a href="#cb18-26" aria-hidden="true" tabindex="-1"></a>            <span class="cf">continue</span>;</span>
+<span id="cb18-27"><a href="#cb18-27" aria-hidden="true" tabindex="-1"></a>        }</span>
+<span id="cb18-28"><a href="#cb18-28" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb18-29"><a href="#cb18-29" aria-hidden="true" tabindex="-1"></a>        i <span class="op">+=</span> <span class="dv">1</span>;</span>
+<span id="cb18-30"><a href="#cb18-30" aria-hidden="true" tabindex="-1"></a>    }</span>
+<span id="cb18-31"><a href="#cb18-31" aria-hidden="true" tabindex="-1"></a>}</span></code></pre>
     </div>
     <p>
       The only trick here, apart from the weird Korean stuff, is that we need an
-      efficient way of fetching the canonical decomposition (if any) of a given code
+      efficient means of fetching the canonical decomposition (if any) of a given code
       point. I did this in a naïve but functional way, by building a hash table from
-      Unicode data. All that my <code>getDecomp</code> function does is to check in that
-      table. (The crazier part is that is that I have a bunch of data structures like
-      this that are derived from Unicode data, and for performance reasons I have them
-      serialized in binary formats. These maps are in some cases large, up to a few
-      hundred KiB on disk, but they can be loaded rapidly at runtime, and a given
-      collator instance needs to do so only once.)
+      Unicode data. My <code>getDecomp</code>
+      function simply checks in that table. (The crazier part is that is that I have
+      several data structures like this that are derived from Unicode data, and for
+      performance reasons I have them serialized in binary formats. These maps are in
+      some cases large, up to a few hundred KiB on disk, but they can be loaded rapidly
+      at runtime, and a given
+      <code>Collator</code> instance needs to do so only once.)
     </p>
     <p>
       Once decomposition has been accomplished, all that’s left for NFD is to fix the
       order of the code points so that it matches what is expected canonically in the
       Unicode standard. This is governed by a property called “canonical combining
       class.” In the case of what we might refer to as <em>base letters</em>, the
-      combining class is 0, i.e., “not reordered.” Such code points are never moved in
-      normalization. Diacritics, on the other hand, have a variety of nonzero combining
-      class values; and when they appear next to one another in a sequence, they should
-      be in order of ascending combining class. The most common scenario in which this
-      might become an issue is when a letter has two or more diacritics attached to it.
-      I can say from my own academic background that this happens with some frequency in
-      Arabic text. There is, for example, a diacritic called <em>shadda</em>, which
-      serves to add emphasis to a consonant; and there are other diacritics that serve
-      as short vowel marks. It is by no means uncommon to see an Arabic letter that has
-      both a <em>shadda</em> and a vowel mark above it. In such cases, the base letter
-      would have a combining class of 0, and the multiple diacritics should, ideally, be
-      set in order of ascending combining class. Let’s look at an example:
+      combining class is <code>0</code>, i.e., “not reordered.” Such code points are
+      never moved in normalization. Diacritics, on the other hand, have a variety of
+      nonzero combining class values; and when they appear next to one another in a
+      sequence, they should be in order of ascending combining class.
+    </p>
+    <p>
+      The most common scenario in which this might become an issue is when a letter has
+      two or more diacritics attached to it. I can say from my own academic background
+      that this happens with some frequency in Arabic text. There is, for example, a
+      diacritic called <em>shadda</em>, which serves to add emphasis to a consonant; and
+      there are other diacritics that serve as short vowel marks. It is by no means
+      uncommon to see an Arabic letter that has both a <em>shadda</em> and a vowel mark
+      on it. In such cases, the base letter would have a combining class of
+      <code>0</code>, and the diacritics should, ideally, be set in order of ascending
+      combining class. Here’s an example:
     </p>
     <div class="sourceCode" id="cb19">
       <pre
         class="sourceCode default"
-      ><code class="sourceCode default"><span id="cb19-1"><a href="#cb19-1" aria-hidden="true" tabindex="-1"></a>U+0628 # Arabic letter bā’, CCC 0</span>
-<span id="cb19-2"><a href="#cb19-2" aria-hidden="true" tabindex="-1"></a>U+064E # Arabic vowel fatḥa, CCC 30</span>
-<span id="cb19-3"><a href="#cb19-3" aria-hidden="true" tabindex="-1"></a>U+0651 # Arabic shadda, CCC 33</span></code></pre>
+      ><code class="sourceCode default"><span id="cb19-1"><a href="#cb19-1" aria-hidden="true" tabindex="-1"></a>U+0628 # Arabic letter bā’   CCC 0</span>
+<span id="cb19-2"><a href="#cb19-2" aria-hidden="true" tabindex="-1"></a>U+064E # Arabic vowel fatḥa  CCC 30</span>
+<span id="cb19-3"><a href="#cb19-3" aria-hidden="true" tabindex="-1"></a>U+0651 # Arabic shadda       CCC 33</span></code></pre>
     </div>
     <p>
       The above sequence meets the criteria of form NFD. Note that it is
       <em>entirely conceivable</em> that someone might type the <em>shadda</em> before
-      the <em>fatḥa</em>; I do so myself. In that case, reordering would be needed for
-      NFD to be achieved, and by extension for Unicode collation.
+      the vowel; I do so myself. In that case, if the input order were preserved, then
+      reordering would be needed for NFD to be achieved – and, by extension, for Unicode
+      collation.
     </p>
     <p>
       The last thing that I’ll show here is my <code>reorder</code> function, mostly
-      because it takes the form of a modified bubble sort, which amuses me. In my
-      several years of work as a programmer, this is the only context in which I’ve been
+      because it takes the form of a modified bubble sort, which amuses me. In all my
+      years of work as a programmer, this is the only context in which I’ve been
       compelled to use everyone’s favorite inefficient sorting algorithm. Comments are
       added for clarity.
     </p>
@@ -928,57 +961,57 @@
       <pre
         class="sourceCode zig"
       ><code class="sourceCode zig"><span id="cb20-1"><a href="#cb20-1" aria-hidden="true" tabindex="-1"></a><span class="kw">fn</span> reorder(input<span class="op">:</span> []<span class="dt">u32</span>) <span class="dt">void</span> {</span>
-<span id="cb20-2"><a href="#cb20-2" aria-hidden="true" tabindex="-1"></a>   <span class="at">var</span> n <span class="op">=</span> input<span class="op">.</span>len;</span>
+<span id="cb20-2"><a href="#cb20-2" aria-hidden="true" tabindex="-1"></a>    <span class="at">var</span> n <span class="op">=</span> input<span class="op">.</span>len;</span>
 <span id="cb20-3"><a href="#cb20-3" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb20-4"><a href="#cb20-4" aria-hidden="true" tabindex="-1"></a>   <span class="cf">while</span> (n <span class="op">&gt;</span> <span class="dv">1</span>) {</span>
-<span id="cb20-5"><a href="#cb20-5" aria-hidden="true" tabindex="-1"></a>      <span class="at">var</span> new_n<span class="op">:</span> <span class="dt">usize</span> <span class="op">=</span> <span class="dv">0</span>;</span>
-<span id="cb20-6"><a href="#cb20-6" aria-hidden="true" tabindex="-1"></a>      <span class="at">var</span> i<span class="op">:</span> <span class="dt">usize</span> <span class="op">=</span> <span class="dv">1</span>;</span>
+<span id="cb20-4"><a href="#cb20-4" aria-hidden="true" tabindex="-1"></a>    <span class="cf">while</span> (n <span class="op">&gt;</span> <span class="dv">1</span>) {</span>
+<span id="cb20-5"><a href="#cb20-5" aria-hidden="true" tabindex="-1"></a>        <span class="at">var</span> new_n<span class="op">:</span> <span class="dt">usize</span> <span class="op">=</span> <span class="dv">0</span>;</span>
+<span id="cb20-6"><a href="#cb20-6" aria-hidden="true" tabindex="-1"></a>        <span class="at">var</span> i<span class="op">:</span> <span class="dt">usize</span> <span class="op">=</span> <span class="dv">1</span>;</span>
 <span id="cb20-7"><a href="#cb20-7" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb20-8"><a href="#cb20-8" aria-hidden="true" tabindex="-1"></a>      <span class="co">// We compare two code points at a time</span></span>
-<span id="cb20-9"><a href="#cb20-9" aria-hidden="true" tabindex="-1"></a>      <span class="cf">while</span> (i <span class="op">&lt;</span> n) {</span>
-<span id="cb20-10"><a href="#cb20-10" aria-hidden="true" tabindex="-1"></a>         <span class="at">const</span> cc_b <span class="op">=</span> ccc<span class="op">.</span>getCombiningClass(input[i]);</span>
+<span id="cb20-8"><a href="#cb20-8" aria-hidden="true" tabindex="-1"></a>        <span class="co">// Compare two code points at a time</span></span>
+<span id="cb20-9"><a href="#cb20-9" aria-hidden="true" tabindex="-1"></a>        <span class="cf">while</span> (i <span class="op">&lt;</span> n) {</span>
+<span id="cb20-10"><a href="#cb20-10" aria-hidden="true" tabindex="-1"></a>            <span class="at">const</span> cc_b <span class="op">=</span> ccc<span class="op">.</span>getCombiningClass(input[i]);</span>
 <span id="cb20-11"><a href="#cb20-11" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb20-12"><a href="#cb20-12" aria-hidden="true" tabindex="-1"></a>         <span class="co">// If the second code point has CCC 0, we can advance by 2</span></span>
-<span id="cb20-13"><a href="#cb20-13" aria-hidden="true" tabindex="-1"></a>         <span class="cf">if</span> (cc_b <span class="op">==</span> <span class="dv">0</span>) {</span>
-<span id="cb20-14"><a href="#cb20-14" aria-hidden="true" tabindex="-1"></a>            i <span class="op">+=</span> <span class="dv">2</span>;</span>
-<span id="cb20-15"><a href="#cb20-15" aria-hidden="true" tabindex="-1"></a>            <span class="cf">continue</span>;</span>
-<span id="cb20-16"><a href="#cb20-16" aria-hidden="true" tabindex="-1"></a>         }</span>
+<span id="cb20-12"><a href="#cb20-12" aria-hidden="true" tabindex="-1"></a>            <span class="co">// If the second code point has CCC 0, we can advance by 2</span></span>
+<span id="cb20-13"><a href="#cb20-13" aria-hidden="true" tabindex="-1"></a>            <span class="cf">if</span> (cc_b <span class="op">==</span> <span class="dv">0</span>) {</span>
+<span id="cb20-14"><a href="#cb20-14" aria-hidden="true" tabindex="-1"></a>                i <span class="op">+=</span> <span class="dv">2</span>;</span>
+<span id="cb20-15"><a href="#cb20-15" aria-hidden="true" tabindex="-1"></a>                <span class="cf">continue</span>;</span>
+<span id="cb20-16"><a href="#cb20-16" aria-hidden="true" tabindex="-1"></a>            }</span>
 <span id="cb20-17"><a href="#cb20-17" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb20-18"><a href="#cb20-18" aria-hidden="true" tabindex="-1"></a>         <span class="at">const</span> cc_a <span class="op">=</span> ccc<span class="op">.</span>getCombiningClass(input[i <span class="op">-</span> <span class="dv">1</span>]);</span>
+<span id="cb20-18"><a href="#cb20-18" aria-hidden="true" tabindex="-1"></a>            <span class="at">const</span> cc_a <span class="op">=</span> ccc<span class="op">.</span>getCombiningClass(input[i <span class="op">-</span> <span class="dv">1</span>]);</span>
 <span id="cb20-19"><a href="#cb20-19" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb20-20"><a href="#cb20-20" aria-hidden="true" tabindex="-1"></a>         <span class="co">// The first code point should have CCC 0 or &lt;= cc_b</span></span>
-<span id="cb20-21"><a href="#cb20-21" aria-hidden="true" tabindex="-1"></a>         <span class="cf">if</span> (cc_a <span class="op">==</span> <span class="dv">0</span> <span class="kw">or</span> cc_a <span class="op">&lt;=</span> cc_b) {</span>
-<span id="cb20-22"><a href="#cb20-22" aria-hidden="true" tabindex="-1"></a>            i <span class="op">+=</span> <span class="dv">1</span>;</span>
-<span id="cb20-23"><a href="#cb20-23" aria-hidden="true" tabindex="-1"></a>            <span class="cf">continue</span>;</span>
-<span id="cb20-24"><a href="#cb20-24" aria-hidden="true" tabindex="-1"></a>         }</span>
+<span id="cb20-20"><a href="#cb20-20" aria-hidden="true" tabindex="-1"></a>            <span class="co">// The first code point should have CCC 0 or &lt;= cc_b</span></span>
+<span id="cb20-21"><a href="#cb20-21" aria-hidden="true" tabindex="-1"></a>            <span class="cf">if</span> (cc_a <span class="op">==</span> <span class="dv">0</span> <span class="kw">or</span> cc_a <span class="op">&lt;=</span> cc_b) {</span>
+<span id="cb20-22"><a href="#cb20-22" aria-hidden="true" tabindex="-1"></a>                i <span class="op">+=</span> <span class="dv">1</span>;</span>
+<span id="cb20-23"><a href="#cb20-23" aria-hidden="true" tabindex="-1"></a>                <span class="cf">continue</span>;</span>
+<span id="cb20-24"><a href="#cb20-24" aria-hidden="true" tabindex="-1"></a>            }</span>
 <span id="cb20-25"><a href="#cb20-25" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb20-26"><a href="#cb20-26" aria-hidden="true" tabindex="-1"></a>         <span class="co">// This means the check failed, and a swap is needed</span></span>
-<span id="cb20-27"><a href="#cb20-27" aria-hidden="true" tabindex="-1"></a>         std<span class="op">.</span>mem<span class="op">.</span>swap(<span class="dt">u32</span><span class="op">,</span> <span class="op">&amp;</span>input[i <span class="op">-</span> <span class="dv">1</span>]<span class="op">,</span> <span class="op">&amp;</span>input[i]);</span>
+<span id="cb20-26"><a href="#cb20-26" aria-hidden="true" tabindex="-1"></a>            <span class="co">// If we made it here, the check failed; a swap is needed</span></span>
+<span id="cb20-27"><a href="#cb20-27" aria-hidden="true" tabindex="-1"></a>            std<span class="op">.</span>mem<span class="op">.</span>swap(<span class="dt">u32</span><span class="op">,</span> <span class="op">&amp;</span>input[i <span class="op">-</span> <span class="dv">1</span>]<span class="op">,</span> <span class="op">&amp;</span>input[i]);</span>
 <span id="cb20-28"><a href="#cb20-28" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb20-29"><a href="#cb20-29" aria-hidden="true" tabindex="-1"></a>         <span class="co">// We use a small optimization to avoid rechecking sorted ranges</span></span>
-<span id="cb20-30"><a href="#cb20-30" aria-hidden="true" tabindex="-1"></a>         new_n <span class="op">=</span> i;</span>
-<span id="cb20-31"><a href="#cb20-31" aria-hidden="true" tabindex="-1"></a>         i <span class="op">+=</span> <span class="dv">1</span>;</span>
-<span id="cb20-32"><a href="#cb20-32" aria-hidden="true" tabindex="-1"></a>      }</span>
+<span id="cb20-29"><a href="#cb20-29" aria-hidden="true" tabindex="-1"></a>            <span class="co">// Small optimization to avoid rechecking sorted ranges</span></span>
+<span id="cb20-30"><a href="#cb20-30" aria-hidden="true" tabindex="-1"></a>            new_n <span class="op">=</span> i;</span>
+<span id="cb20-31"><a href="#cb20-31" aria-hidden="true" tabindex="-1"></a>            i <span class="op">+=</span> <span class="dv">1</span>;</span>
+<span id="cb20-32"><a href="#cb20-32" aria-hidden="true" tabindex="-1"></a>        }</span>
 <span id="cb20-33"><a href="#cb20-33" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb20-34"><a href="#cb20-34" aria-hidden="true" tabindex="-1"></a>      n <span class="op">=</span> new_n;</span>
-<span id="cb20-35"><a href="#cb20-35" aria-hidden="true" tabindex="-1"></a>   }</span>
+<span id="cb20-34"><a href="#cb20-34" aria-hidden="true" tabindex="-1"></a>        n <span class="op">=</span> new_n;</span>
+<span id="cb20-35"><a href="#cb20-35" aria-hidden="true" tabindex="-1"></a>    }</span>
 <span id="cb20-36"><a href="#cb20-36" aria-hidden="true" tabindex="-1"></a>}</span></code></pre>
     </div>
     <p>
       As you can see, this relies on repeated calls of <code>getCombiningClass</code>. I
       found, while benchmarking my UCA implementation, that looking up combining classes
-      is one of the hottest paths in the entire library. It demands a special degree of
+      is one of the hottest paths in the library. It demands a special degree of
       optimization, which is an interesting problem but beyond the scope of this post.
     </p>
     <h2 id="prefix-trimming">Prefix Trimming</h2>
     <p>
-      This sounds like it should be one of the simplest steps in the collation process.
+      This sounds like it should be among the simplest steps in the collation process.
       By this point, we know that the two strings being compared are not equal, and that
       a collation decision cannot be reached by looking at ASCII-range characters at the
       beginning of each string. And both have been set in form NFD (or close enough, via
       FCD). Now we can just trim whatever common prefix exists in the two lists of code
-      points, n’est-ce pas? Almost, but there are a few subtleties of Unicode collation
-      that can trip us up.
+      points, <em>n’est-ce pas</em>? Almost, but there are a few subtleties of Unicode
+      collation that can trip us up.
     </p>
     <p>
       Let’s have a look at my <code>findOffset</code> function. Note that, for
@@ -990,97 +1023,96 @@
     <div class="sourceCode" id="cb21">
       <pre
         class="sourceCode zig"
-      ><code class="sourceCode zig"><span id="cb21-1"><a href="#cb21-1" aria-hidden="true" tabindex="-1"></a><span class="kw">pub</span> <span class="kw">fn</span> findOffset(coll<span class="op">:</span> <span class="op">*</span>Collator) <span class="op">!</span><span class="dt">usize</span> {</span>
-<span id="cb21-2"><a href="#cb21-2" aria-hidden="true" tabindex="-1"></a>   <span class="at">const</span> a <span class="op">=</span> coll<span class="op">.</span>a_chars<span class="op">.</span>items;</span>
-<span id="cb21-3"><a href="#cb21-3" aria-hidden="true" tabindex="-1"></a>   <span class="at">const</span> b <span class="op">=</span> coll<span class="op">.</span>b_chars<span class="op">.</span>items;</span>
-<span id="cb21-4"><a href="#cb21-4" aria-hidden="true" tabindex="-1"></a>   <span class="at">var</span> offset<span class="op">:</span> <span class="dt">usize</span> <span class="op">=</span> <span class="dv">0</span>;</span>
+      ><code class="sourceCode zig"><span id="cb21-1"><a href="#cb21-1" aria-hidden="true" tabindex="-1"></a><span class="kw">pub</span> <span class="kw">fn</span> findOffset(coll<span class="op">:</span> <span class="op">*</span>Collator) <span class="dt">usize</span> {</span>
+<span id="cb21-2"><a href="#cb21-2" aria-hidden="true" tabindex="-1"></a>    <span class="at">const</span> a <span class="op">=</span> coll<span class="op">.</span>a_chars<span class="op">.</span>items;</span>
+<span id="cb21-3"><a href="#cb21-3" aria-hidden="true" tabindex="-1"></a>    <span class="at">const</span> b <span class="op">=</span> coll<span class="op">.</span>b_chars<span class="op">.</span>items;</span>
+<span id="cb21-4"><a href="#cb21-4" aria-hidden="true" tabindex="-1"></a>    <span class="at">var</span> offset<span class="op">:</span> <span class="dt">usize</span> <span class="op">=</span> <span class="dv">0</span>;</span>
 <span id="cb21-5"><a href="#cb21-5" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb21-6"><a href="#cb21-6" aria-hidden="true" tabindex="-1"></a>   <span class="cf">while</span> (offset <span class="op">&lt;</span> <span class="bu">@min</span>(a<span class="op">.</span>len<span class="op">,</span> b<span class="op">.</span>len)) <span class="op">:</span> (offset <span class="op">+=</span> <span class="dv">1</span>) {</span>
-<span id="cb21-7"><a href="#cb21-7" aria-hidden="true" tabindex="-1"></a>      <span class="co">// Obviously, we stop incrementing the offset once the lists differ</span></span>
-<span id="cb21-8"><a href="#cb21-8" aria-hidden="true" tabindex="-1"></a>      <span class="cf">if</span> (a[offset] <span class="op">!=</span> b[offset]) <span class="cf">break</span>;</span>
+<span id="cb21-6"><a href="#cb21-6" aria-hidden="true" tabindex="-1"></a>    <span class="cf">while</span> (offset <span class="op">&lt;</span> <span class="bu">@min</span>(a<span class="op">.</span>len<span class="op">,</span> b<span class="op">.</span>len)) <span class="op">:</span> (offset <span class="op">+=</span> <span class="dv">1</span>) {</span>
+<span id="cb21-7"><a href="#cb21-7" aria-hidden="true" tabindex="-1"></a>        <span class="co">// Obviously, we stop incrementing the offset once the lists differ</span></span>
+<span id="cb21-8"><a href="#cb21-8" aria-hidden="true" tabindex="-1"></a>        <span class="cf">if</span> (a[offset] <span class="op">!=</span> b[offset]) <span class="cf">break</span>;</span>
 <span id="cb21-9"><a href="#cb21-9" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb21-10"><a href="#cb21-10" aria-hidden="true" tabindex="-1"></a>      <span class="co">// If we reach a character that could begin a multi-code-point sequence</span></span>
-<span id="cb21-11"><a href="#cb21-11" aria-hidden="true" tabindex="-1"></a>      <span class="co">// in the collation tables, we also stop</span></span>
-<span id="cb21-12"><a href="#cb21-12" aria-hidden="true" tabindex="-1"></a>      <span class="cf">if</span> (std<span class="op">.</span>mem<span class="op">.</span>indexOfScalar(<span class="dt">u32</span><span class="op">,</span> <span class="op">&amp;</span>consts<span class="op">.</span>NEED_TWO<span class="op">,</span> a[offset])) <span class="op">|</span>_<span class="op">|</span> <span class="cf">break</span>;</span>
-<span id="cb21-13"><a href="#cb21-13" aria-hidden="true" tabindex="-1"></a>      <span class="cf">if</span> (std<span class="op">.</span>mem<span class="op">.</span>indexOfScalar(<span class="dt">u32</span><span class="op">,</span> <span class="op">&amp;</span>consts<span class="op">.</span>NEED_THREE<span class="op">,</span> a[offset])) <span class="op">|</span>_<span class="op">|</span> <span class="cf">break</span>;</span>
-<span id="cb21-14"><a href="#cb21-14" aria-hidden="true" tabindex="-1"></a>   }</span>
+<span id="cb21-10"><a href="#cb21-10" aria-hidden="true" tabindex="-1"></a>        <span class="co">// If we reach a character that could begin a multi-code-point sequence</span></span>
+<span id="cb21-11"><a href="#cb21-11" aria-hidden="true" tabindex="-1"></a>        <span class="co">// in the collation tables, we also stop</span></span>
+<span id="cb21-12"><a href="#cb21-12" aria-hidden="true" tabindex="-1"></a>        <span class="cf">if</span> (std<span class="op">.</span>mem<span class="op">.</span>indexOfScalar(<span class="dt">u32</span><span class="op">,</span> <span class="op">&amp;</span>consts<span class="op">.</span>NEED_TWO<span class="op">,</span> a[offset])) <span class="op">|</span>_<span class="op">|</span> <span class="cf">break</span>;</span>
+<span id="cb21-13"><a href="#cb21-13" aria-hidden="true" tabindex="-1"></a>        <span class="cf">if</span> (std<span class="op">.</span>mem<span class="op">.</span>indexOfScalar(<span class="dt">u32</span><span class="op">,</span> <span class="op">&amp;</span>consts<span class="op">.</span>NEED_THREE<span class="op">,</span> a[offset])) <span class="op">|</span>_<span class="op">|</span> <span class="cf">break</span>;</span>
+<span id="cb21-14"><a href="#cb21-14" aria-hidden="true" tabindex="-1"></a>    }</span>
 <span id="cb21-15"><a href="#cb21-15" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb21-16"><a href="#cb21-16" aria-hidden="true" tabindex="-1"></a>   <span class="cf">if</span> (offset <span class="op">==</span> <span class="dv">0</span>) <span class="cf">return</span> <span class="dv">0</span>;</span>
+<span id="cb21-16"><a href="#cb21-16" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> (offset <span class="op">==</span> <span class="dv">0</span>) <span class="cf">return</span> <span class="dv">0</span>;</span>
 <span id="cb21-17"><a href="#cb21-17" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb21-18"><a href="#cb21-18" aria-hidden="true" tabindex="-1"></a>   <span class="co">// If we&#39;re using the &quot;shifted&quot; approach to variable-weight characters,</span></span>
-<span id="cb21-19"><a href="#cb21-19" aria-hidden="true" tabindex="-1"></a>   <span class="co">// and the last character in the prefix is one such, we have a problem</span></span>
-<span id="cb21-20"><a href="#cb21-20" aria-hidden="true" tabindex="-1"></a>   <span class="cf">if</span> (coll<span class="op">.</span>shifting <span class="kw">and</span> <span class="cf">try</span> coll<span class="op">.</span>getVariable(a[offset <span class="op">-</span> <span class="dv">1</span>])) {</span>
-<span id="cb21-21"><a href="#cb21-21" aria-hidden="true" tabindex="-1"></a>      <span class="co">// We can try walking the offset back by one</span></span>
-<span id="cb21-22"><a href="#cb21-22" aria-hidden="true" tabindex="-1"></a>      <span class="cf">if</span> (offset <span class="op">&gt;</span> <span class="dv">1</span>) {</span>
-<span id="cb21-23"><a href="#cb21-23" aria-hidden="true" tabindex="-1"></a>         <span class="cf">if</span> (<span class="cf">try</span> coll<span class="op">.</span>getVariable(a[offset <span class="op">-</span> <span class="dv">2</span>])) <span class="cf">return</span> <span class="dv">0</span>;</span>
-<span id="cb21-24"><a href="#cb21-24" aria-hidden="true" tabindex="-1"></a>         <span class="cf">return</span> offset <span class="op">-</span> <span class="dv">1</span>;</span>
-<span id="cb21-25"><a href="#cb21-25" aria-hidden="true" tabindex="-1"></a>      }</span>
+<span id="cb21-18"><a href="#cb21-18" aria-hidden="true" tabindex="-1"></a>    <span class="co">// If we&#39;re using the &quot;shifted&quot; approach to variable-weight characters,</span></span>
+<span id="cb21-19"><a href="#cb21-19" aria-hidden="true" tabindex="-1"></a>    <span class="co">// and the last character in the prefix is one such, we have a problem</span></span>
+<span id="cb21-20"><a href="#cb21-20" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> (coll<span class="op">.</span>shifting <span class="kw">and</span> coll<span class="op">.</span>getVariable(a[offset <span class="op">-</span> <span class="dv">1</span>])) {</span>
+<span id="cb21-21"><a href="#cb21-21" aria-hidden="true" tabindex="-1"></a>        <span class="co">// We can try walking the offset back by one</span></span>
+<span id="cb21-22"><a href="#cb21-22" aria-hidden="true" tabindex="-1"></a>        <span class="cf">if</span> (offset <span class="op">&gt;</span> <span class="dv">1</span>) {</span>
+<span id="cb21-23"><a href="#cb21-23" aria-hidden="true" tabindex="-1"></a>            <span class="cf">if</span> (coll<span class="op">.</span>getVariable(a[offset <span class="op">-</span> <span class="dv">2</span>])) <span class="cf">return</span> <span class="dv">0</span>;</span>
+<span id="cb21-24"><a href="#cb21-24" aria-hidden="true" tabindex="-1"></a>            <span class="cf">return</span> offset <span class="op">-</span> <span class="dv">1</span>;</span>
+<span id="cb21-25"><a href="#cb21-25" aria-hidden="true" tabindex="-1"></a>        }</span>
 <span id="cb21-26"><a href="#cb21-26" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb21-27"><a href="#cb21-27" aria-hidden="true" tabindex="-1"></a>      <span class="co">// On rare occasions (i.e., in the conformance tests), this might fail</span></span>
-<span id="cb21-28"><a href="#cb21-28" aria-hidden="true" tabindex="-1"></a>      <span class="co">// the entire prefix function</span></span>
-<span id="cb21-29"><a href="#cb21-29" aria-hidden="true" tabindex="-1"></a>      <span class="cf">return</span> <span class="dv">0</span>;</span>
-<span id="cb21-30"><a href="#cb21-30" aria-hidden="true" tabindex="-1"></a>   }</span>
+<span id="cb21-27"><a href="#cb21-27" aria-hidden="true" tabindex="-1"></a>        <span class="co">// On rare occasions (i.e., in the conformance tests), this might fail</span></span>
+<span id="cb21-28"><a href="#cb21-28" aria-hidden="true" tabindex="-1"></a>        <span class="co">// the entire prefix function</span></span>
+<span id="cb21-29"><a href="#cb21-29" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span> <span class="dv">0</span>;</span>
+<span id="cb21-30"><a href="#cb21-30" aria-hidden="true" tabindex="-1"></a>    }</span>
 <span id="cb21-31"><a href="#cb21-31" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb21-32"><a href="#cb21-32" aria-hidden="true" tabindex="-1"></a>   <span class="cf">return</span> offset;</span>
+<span id="cb21-32"><a href="#cb21-32" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> offset;</span>
 <span id="cb21-33"><a href="#cb21-33" aria-hidden="true" tabindex="-1"></a>}</span></code></pre>
     </div>
     <p>
       I’m sure that neither of the problem scenarios makes any sense right now, but I’ll
       explain what’s going on. You can see already that we have to keep an eye out for
-      two things in the prefix code points: characters that may begin multi-code-point
-      sequences in the collation tables (and therefore cannot safely be severed from the
-      characters that follow them); and, depending on the configuration of the collator,
-      characters that have <em>variable weights</em>. To be clear, these are all
-      relatively uncommon scenarios. But the conformance tests will not pass with
-      anything less than exactitude.
+      two things in the prefix code points: characters that may begin
+      <strong>multi-code-point sequences</strong> in the collation tables (and therefore
+      cannot safely be severed from the characters that follow them); and, depending on
+      the configuration of the collator, characters that have
+      <strong>variable weights</strong>. To be clear, these are relatively uncommon
+      scenarios. But the conformance tests will not pass with anything less than
+      exactitude.
     </p>
     <h3 id="multi-code-point-weights">Multi-Code-Point Weights</h3>
     <p>
       I feel bad for hiding this complexity until deep into the post. When I showed
-      example lines from the DUCET earlier, I chose typical, easy examples. Each of
-      those lines had one code point mapped to one set of weights. In reality, it can
-      happen that one code point is mapped to multiple sets of weights, which is easy to
-      handle; or that a sequence of two or three code points is mapped to one or more
-      sets of weights, which is rather difficult to handle. Below are examples of each
-      of these phenomena.
+      example lines from the DUCET earlier, I focused on typical, easy cases. Each of
+      those lines had one code point mapped to one or two sets of weights. In reality,
+      it can happen that a single code point is mapped to a larger number of weights,
+      which is easy to handle; or that a sequence of <em>two or three</em> code points
+      is mapped to one or more sets of weights, which is rather difficult to handle.
+      Below are a couple examples selected at random.
     </p>
     <div class="sourceCode" id="cb22">
       <pre
         class="sourceCode default"
-      ><code class="sourceCode default"><span id="cb22-1"><a href="#cb22-1" aria-hidden="true" tabindex="-1"></a>191D      ; [.38DD.0020.0004][.38FB.0020.0004] # LIMBU LETTER GYAN</span>
-<span id="cb22-2"><a href="#cb22-2" aria-hidden="true" tabindex="-1"></a>1B3A      ; [.3C75.0020.0002]                  # BALINESE VOWEL SIGN RA REPA</span>
-<span id="cb22-3"><a href="#cb22-3" aria-hidden="true" tabindex="-1"></a>1B3A 1B35 ; [.3C76.0020.0002]                  # BALINESE VOWEL SIGN RA REPA TEDUNG</span></code></pre>
+      ><code class="sourceCode default"><span id="cb22-1"><a href="#cb22-1" aria-hidden="true" tabindex="-1"></a>0F71 0F74 ; [.37B0.0020.0002]                                   # TIBETAN VOWEL SIGN UU</span>
+<span id="cb22-2"><a href="#cb22-2" aria-hidden="true" tabindex="-1"></a>330A      ; [.47E9.0020.001C][.2145.0020.001C][.4805.0020.001C] # SQUARE OOMU</span></code></pre>
     </div>
     <p>
       Imagine that we’re iterating through a list of code points from a given string and
-      building its <em>collation element array</em>. If we reach the character
-      <code>U+191D</code>, that’s fine—we just have two sets of weights to append to the
-      CEA, rather than the one that we’re accustomed to. But what if we encounter
-      <code>U+1B3A</code>? This poses a real problem: we need to look ahead to the next
-      code point. If what follows is <code>U+1B35</code>, then the UCA requires that we
-      take the two code points as one unit and use the appropriate collation weights.
-      Otherwise, <code>U+1B3A</code> will be handled on its own.
+      building its collation element array. If we reach the character
+      <code>U+330A</code>, that’s fine – we just have three sets of weights to append to
+      the CEA, rather than the one that we’re accustomed to. But what if we encounter
+      <code>U+0F71</code>? This poses a real problem: we need to look ahead to the next
+      code point. If what follows is <code>U+0F74</code>, then the UCA requires that we
+      take the two code points as a unit and use the appropriate collation weights.
+      Otherwise, <code>U+0F71</code> will be handled on its own.
     </p>
     <p>
       The number of code points that can begin two-character sequences in the collation
       tables is very small in the grand scheme of things: 71 (as of Unicode version 16).
-      There is an even smaller number of code points that can begin
-      <em>three</em>-character sequences: just 6. Any time that we encounter any of
-      these 77 code points, more complex handling is required. This means, among other
-      things, that we cannot trim a shared prefix that ends with a character like
-      <code>U+1B3A</code>.
+      There’s an even smaller number of code points that can begin three-character
+      sequences: just 6. Any time that we encounter one of these 77 code points, more
+      complex handling is required. This means, among other things, that we cannot trim
+      a shared prefix that ends with a character like <code>U+0F71</code>.
     </p>
     <p>
       If you want to learn more about the treatment of multi-code-point sequences, fear
-      not—we’ll return to this issue in discussing the construction of collation element
-      arrays. May the gods help us.
+      not – we’ll return to this issue in discussing the construction of collation
+      element arrays. May the gods help us.
     </p>
     <h3 id="variable-weights">Variable Weights</h3>
     <p>
       Here we have an even more outside-the-box concept: there are certain characters
-      that one might prefer to ignore in collation (at least at the main levels). These
-      include whitespace characters, punctuation, and some symbols. Take the following
-      example:
+      that one might prefer to <em>ignore</em> in collation (at least at the main
+      levels). These include whitespace characters, punctuation, and some symbols. Take
+      the following example:
     </p>
     <div class="sourceCode" id="cb23">
       <pre
@@ -1094,9 +1126,9 @@
       character for collation purposes is one valid, common approach. But a user might
       prefer to ignore the space at the primary, secondary, and tertiary levels, so that
       “foo baz” and “foobaz” would be grouped together, differing only at a
-      <em>quaternary</em> level. This is known in the UCA as the “shifted” approach, and
-      it is made possible by the assigning of <em>variable weights</em> to the relevant
-      code points in the tables.
+      <em>quaternary</em> level. This is known in the UCA as the
+      <strong>“shifted” approach</strong>, and it is made possible by the assigning of
+      <strong>variable weights</strong> to the relevant code points in the tables.
     </p>
     <div class="sourceCode" id="cb24">
       <pre
@@ -1107,8 +1139,8 @@
     </div>
     <p>
       If you look in the tables for a character like <code>U+0020</code>, the normal
-      space, you will see that the set of weights has a star at the beginning instead of
-      a period. This marks it as variable.
+      space, you will see that the set of weights has an asterisk at the beginning
+      instead of a period. This marks it as <em>variable</em>.
     </p>
     <div class="sourceCode" id="cb25">
       <pre
@@ -1117,57 +1149,58 @@
     </div>
     <p>
       A conformant implementation of the UCA needs to be able to handle variable-weight
-      characters according to either the “non-ignorable” or the “shifted” approach.
-      There are, in fact, separate conformance tests for them. I’ll come back to this
-      issue later. For the moment, all that we need to understand is that, when variable
-      weights are being shifted, it has some subtle effects on the treatment of
-      surrounding characters. This is why we cannot safely trim a shared prefix from two
-      strings if the “shifted” approach is specified and the final code point in the
-      prefix has variable weights.
+      characters according to either the <strong>“non-ignorable”</strong> or the
+      <strong>“shifted”</strong> approach. There are, in fact, separate conformance
+      tests for them. I’ll come back to this issue later. For the moment, what we need
+      to understand is that, when variable weights are being shifted, it has subtle
+      effects on the treatment of surrounding characters. This is why we cannot safely
+      trim a shared prefix from two strings if the “shifted” approach is specified and
+      the final code point in the prefix has variable weights.
     </p>
     <h2 id="the-collation-element-array">The Collation Element Array</h2>
     <p>
       Now we reach the heart of the matter. I know that I’ve already gone into some
       depth in the preceding sections, but generating the CEA is a different beast. My
-      primary function in this area is too long—a little over a hundred actual lines of
-      code, more with comments and empty lines—to show here in full. And that function,
-      <code>generateCEA</code>, calls a number of smaller utility functions that I’ve
-      abstracted out.
+      primary function in this area is too long – around a hundred lines of code, more
+      with comments and empty lines – for it to make sense to show in full. And that
+      function, <code>generateCEA</code>, calls a number of smaller utility functions
+      that I’ve abstracted out.
     </p>
     <p>
-      The easy part to understand is that <code>generateCEA</code> takes a list of code
-      points representing one string, iterates over them, fetches their collation
-      weights, and appends those to a separate list, namely the CEA. Most of the
-      function takes place in a <code>while</code> loop, which is completed once all the
-      code points have been processed. The complicated part is that, in each iteration
-      of the big loop, there are seven possible outcomes for the code point(s) in
-      question. I figure that I can at least explain those different paths here. I have
-      them labeled in my code in order of how much work they represent, from least to
-      greatest.
+      The easy part to grok is that <code>generateCEA</code> takes a list of code points
+      representing a string, iterates over them, fetches their collation weights, and
+      appends those weights to a separate list, namely the CEA. Most of the function
+      takes place in a <code>while</code> loop, which is completed once all the code
+      points have been processed. The <em>complicated</em> part is that, in each
+      iteration of the big loop, there are seven possible outcomes for the code point(s)
+      in question. I figure that I can at least outline those different paths here. I
+      have them labeled in my code in order of how much work they represent, from least
+      to greatest.
     </p>
     <ol type="1">
       <li>
         <p>
-          A low code point (below <code>U+00B7</code>) can be looked up in a small
-          table, its weights retrieved very quickly.
+          A low code point (below <code>U+00B7</code>) can have its weights fetched from
+          a sparse array, with the code point value serving as the index. This is as
+          fast as it gets.
         </p>
       </li>
       <li>
         <p>
-          A higher code point, but one that is still “safe”—i.e., not among the possible
-          starters of two- or three-code-point sequences—can be looked up in a larger
-          map of weights. This is still quite simple.
+          A higher code point, but one that is “safe” – i.e., not among the possible
+          starters of two- or three-code-point sequences – can be directly looked up in
+          a hash table of weights. This is still pretty good.
         </p>
       </li>
       <li>
         <p>
           A code point that is not listed at all in the collation weight tables can have
-          its weights calculated algorithmically. These are called “implicit weights,”
-          and in fact they apply to large swaths of the Unicode space, including most
-          ranges of CJK characters. It is to our great benefit that so many code points
-          don’t need explicitly defined collation weights; the tables would otherwise be
-          much, much larger. At any rate, calculating implicit weights for the CEA is
-          still a good outcome.
+          its weights calculated algorithmically. These are called
+          <strong>implicit weights</strong>, and in fact they apply to large swaths of
+          the Unicode space, including most ranges of CJK characters. It is to our great
+          benefit that so many code points don’t need explicitly defined collation
+          weights; the tables would otherwise be much, much larger. At any rate,
+          calculating implicit weights for the CEA is a nice outcome.
         </p>
       </li>
       <li>
@@ -1175,9 +1208,9 @@
           We encounter a code point that could begin a multi-character sequence, so we
           look ahead to the next one or two code points. This <em>does</em> yield a
           match, consisting of two code points. The UCA then requires us to check for a
-          third character that may be “discontiguous” with the first two—i.e., to look
-          further ahead in case of a malformed sequence. This is where I find that the
-          UCA rules veer into the ridiculous; but whatever. Outcome 4 is when we check
+          third character that may be “discontiguous” with the first two – i.e., to look
+          further ahead in case of a malformed sequence. (This is where I find that the
+          UCA rules veer into the ridiculous; but whatever.) Outcome 4 is when we check
           for such a discontiguous match and actually find one.
         </p>
       </li>
@@ -1189,7 +1222,7 @@
           further for a possible discontiguous match, and we can process the weights and
           move on. Alternatively, this path can be reached if we found a two-code-point
           sequence, looked further for a discontiguous match, and failed to find one.
-          Outcome 5 could, therefore, be better or worse than 4.
+          Outcome 5 could, therefore, be “better” or “worse” than 4.
         </p>
       </li>
       <li>
@@ -1214,28 +1247,28 @@
     </ol>
     <p>
       From what I’ve seen, in benchmarks on real-world text data, we exit this loop via
-      path 1, 2, or 3 almost all the time. So it’s not so bad, not terribly inefficient.
+      path 1, 2, or 3 almost all the time. So it’s not terribly inefficient in practice.
       But I think the whole matter of “discontiguous matches” in the UCA is absurd,
       particularly given that the algorithm requires us to normalize an input string to
       form NFD before we even reach this stage. The first time that I wrote an
-      implementation, in Rust, it took me ages to get the CEA function to a point where
-      the conformance tests would pass.
+      implementation, in Rust, it took me <em>ages</em> to get the CEA function to a
+      point where the conformance tests would pass.
     </p>
     <p>
       If anyone wants more detail on CEA generation, I could certainly provide it. My
       inclination, however, is to move on with this post. Once the collation element
       arrays are in place, the algorithm can move forward with processing them into sort
-      keys, which is considerably simpler.
+      keys, which is much simpler.
     </p>
     <h2 id="sort-keys">Sort Keys</h2>
     <p>
-      If you’ve read this far, you know how this works. We have two collation element
-      arrays, each a list of <em>sets of weights</em> pertaining to the input strings of
-      the collation function, which is charged with returning an ordering
-      value—something like “less than,” “equal to,” or “greater than.” And all that we
-      need to do now is to consider the collation weights that we’ve collected, one
-      <em>level</em> at a time, one <em>index</em> at a time. As soon as we find a
-      difference, we return it.
+      If you’ve read this far, you effectively know how this works. We have two
+      collation element arrays, each a list of <em>sets of weights</em> pertaining to
+      the input strings of the collation function, which is charged with returning an
+      ordering value – something like “less than,” “equal to,” or “greater than.” And
+      all that we need to do now is to consider the collation weights that we’ve
+      collected, one <em>level</em> at a time, one <em>index</em> at a time. As soon as
+      we find a difference, we return it.
     </p>
     <p>
       Let me just show you how this looks in code, taking the example of the primary
@@ -1246,48 +1279,46 @@
       <pre
         class="sourceCode zig"
       ><code class="sourceCode zig"><span id="cb26-1"><a href="#cb26-1" aria-hidden="true" tabindex="-1"></a><span class="kw">fn</span> comparePrimary(a_cea<span class="op">:</span> []<span class="at">const</span> <span class="dt">u32</span><span class="op">,</span> b_cea<span class="op">:</span> []<span class="at">const</span> <span class="dt">u32</span>) <span class="op">?</span>std<span class="op">.</span>math<span class="op">.</span>Order {</span>
-<span id="cb26-2"><a href="#cb26-2" aria-hidden="true" tabindex="-1"></a>   <span class="co">// We need separate iterators, advancing to the next nonzero value in each</span></span>
-<span id="cb26-3"><a href="#cb26-3" aria-hidden="true" tabindex="-1"></a>   <span class="at">var</span> i_a<span class="op">:</span> <span class="dt">usize</span> <span class="op">=</span> <span class="dv">0</span>;</span>
-<span id="cb26-4"><a href="#cb26-4" aria-hidden="true" tabindex="-1"></a>   <span class="at">var</span> i_b<span class="op">:</span> <span class="dt">usize</span> <span class="op">=</span> <span class="dv">0</span>;</span>
+<span id="cb26-2"><a href="#cb26-2" aria-hidden="true" tabindex="-1"></a>    <span class="co">// We need separate iterators, advancing to the next nonzero value in each</span></span>
+<span id="cb26-3"><a href="#cb26-3" aria-hidden="true" tabindex="-1"></a>    <span class="at">var</span> i_a<span class="op">:</span> <span class="dt">usize</span> <span class="op">=</span> <span class="dv">0</span>;</span>
+<span id="cb26-4"><a href="#cb26-4" aria-hidden="true" tabindex="-1"></a>    <span class="at">var</span> i_b<span class="op">:</span> <span class="dt">usize</span> <span class="op">=</span> <span class="dv">0</span>;</span>
 <span id="cb26-5"><a href="#cb26-5" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb26-6"><a href="#cb26-6" aria-hidden="true" tabindex="-1"></a>   <span class="co">// Loop until return: a result, or iterator exhaustion</span></span>
-<span id="cb26-7"><a href="#cb26-7" aria-hidden="true" tabindex="-1"></a>   <span class="cf">while</span> (<span class="cn">true</span>) {</span>
-<span id="cb26-8"><a href="#cb26-8" aria-hidden="true" tabindex="-1"></a>      <span class="at">const</span> a_p <span class="op">=</span> nextValidPrimary(a_cea<span class="op">,</span> <span class="op">&amp;</span>i_a);</span>
-<span id="cb26-9"><a href="#cb26-9" aria-hidden="true" tabindex="-1"></a>      <span class="at">const</span> b_p <span class="op">=</span> nextValidPrimary(b_cea<span class="op">,</span> <span class="op">&amp;</span>i_b);</span>
+<span id="cb26-6"><a href="#cb26-6" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Loop until return: a result, or iterator exhaustion</span></span>
+<span id="cb26-7"><a href="#cb26-7" aria-hidden="true" tabindex="-1"></a>    <span class="cf">while</span> (<span class="cn">true</span>) {</span>
+<span id="cb26-8"><a href="#cb26-8" aria-hidden="true" tabindex="-1"></a>        <span class="at">const</span> a_p <span class="op">=</span> nextValidPrimary(a_cea<span class="op">,</span> <span class="op">&amp;</span>i_a);</span>
+<span id="cb26-9"><a href="#cb26-9" aria-hidden="true" tabindex="-1"></a>        <span class="at">const</span> b_p <span class="op">=</span> nextValidPrimary(b_cea<span class="op">,</span> <span class="op">&amp;</span>i_b);</span>
 <span id="cb26-10"><a href="#cb26-10" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb26-11"><a href="#cb26-11" aria-hidden="true" tabindex="-1"></a>      <span class="co">// If we found a difference, return it</span></span>
-<span id="cb26-12"><a href="#cb26-12" aria-hidden="true" tabindex="-1"></a>      <span class="cf">if</span> (a_p <span class="op">!=</span> b_p) <span class="cf">return</span> util<span class="op">.</span>cmp(<span class="dt">u16</span><span class="op">,</span> a_p<span class="op">,</span> b_p);</span>
-<span id="cb26-13"><a href="#cb26-13" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb26-14"><a href="#cb26-14" aria-hidden="true" tabindex="-1"></a>      <span class="cf">if</span> (a_p <span class="op">==</span> <span class="dv">0</span>) <span class="cf">return</span> <span class="cn">null</span>; <span class="co">// i.e., both exhausted</span></span>
-<span id="cb26-15"><a href="#cb26-15" aria-hidden="true" tabindex="-1"></a>   }</span>
-<span id="cb26-16"><a href="#cb26-16" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb26-17"><a href="#cb26-17" aria-hidden="true" tabindex="-1"></a>   <span class="co">// Assert to the compiler that we will definitely return from the loop</span></span>
-<span id="cb26-18"><a href="#cb26-18" aria-hidden="true" tabindex="-1"></a>   <span class="kw">unreachable</span>;</span>
-<span id="cb26-19"><a href="#cb26-19" aria-hidden="true" tabindex="-1"></a>}</span></code></pre>
+<span id="cb26-11"><a href="#cb26-11" aria-hidden="true" tabindex="-1"></a>        <span class="cf">if</span> (a_p <span class="op">!=</span> b_p) <span class="cf">return</span> util<span class="op">.</span>cmp(<span class="dt">u16</span><span class="op">,</span> a_p<span class="op">,</span> b_p);</span>
+<span id="cb26-12"><a href="#cb26-12" aria-hidden="true" tabindex="-1"></a>        <span class="cf">if</span> (a_p <span class="op">==</span> <span class="dv">0</span>) <span class="cf">return</span> <span class="cn">null</span>; <span class="co">// i.e., both exhausted</span></span>
+<span id="cb26-13"><a href="#cb26-13" aria-hidden="true" tabindex="-1"></a>    }</span>
+<span id="cb26-14"><a href="#cb26-14" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb26-15"><a href="#cb26-15" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Assert to the compiler that we will definitely return from the loop</span></span>
+<span id="cb26-16"><a href="#cb26-16" aria-hidden="true" tabindex="-1"></a>    <span class="kw">unreachable</span>;</span>
+<span id="cb26-17"><a href="#cb26-17" aria-hidden="true" tabindex="-1"></a>}</span></code></pre>
     </div>
     <p>For good measure, let’s also have a look at the relevant iterator function:</p>
     <div class="sourceCode" id="cb27">
       <pre
         class="sourceCode zig"
       ><code class="sourceCode zig"><span id="cb27-1"><a href="#cb27-1" aria-hidden="true" tabindex="-1"></a><span class="kw">fn</span> nextValidPrimary(cea<span class="op">:</span> []<span class="at">const</span> <span class="dt">u32</span><span class="op">,</span> i<span class="op">:</span> <span class="op">*</span><span class="dt">usize</span>) <span class="dt">u16</span> {</span>
-<span id="cb27-2"><a href="#cb27-2" aria-hidden="true" tabindex="-1"></a>   <span class="cf">while</span> (i<span class="op">.*</span> <span class="op">&lt;</span> cea<span class="op">.</span>len) {</span>
-<span id="cb27-3"><a href="#cb27-3" aria-hidden="true" tabindex="-1"></a>      <span class="at">const</span> nextWeights <span class="op">=</span> cea[i<span class="op">.*</span>];</span>
+<span id="cb27-2"><a href="#cb27-2" aria-hidden="true" tabindex="-1"></a>    <span class="cf">while</span> (i<span class="op">.*</span> <span class="op">&lt;</span> cea<span class="op">.</span>len) {</span>
+<span id="cb27-3"><a href="#cb27-3" aria-hidden="true" tabindex="-1"></a>        <span class="at">const</span> nextWeights <span class="op">=</span> cea[i<span class="op">.*</span>];</span>
 <span id="cb27-4"><a href="#cb27-4" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb27-5"><a href="#cb27-5" aria-hidden="true" tabindex="-1"></a>      <span class="co">// u32 max is used as a sentinel value to end the CEA</span></span>
-<span id="cb27-6"><a href="#cb27-6" aria-hidden="true" tabindex="-1"></a>      <span class="cf">if</span> (nextWeights <span class="op">==</span> std<span class="op">.</span>math<span class="op">.</span>maxInt(<span class="dt">u32</span>)) <span class="cf">return</span> <span class="dv">0</span>;</span>
+<span id="cb27-5"><a href="#cb27-5" aria-hidden="true" tabindex="-1"></a>        <span class="co">// u32 max is used as a sentinel value to end the CEA</span></span>
+<span id="cb27-6"><a href="#cb27-6" aria-hidden="true" tabindex="-1"></a>        <span class="cf">if</span> (nextWeights <span class="op">==</span> std<span class="op">.</span>math<span class="op">.</span>maxInt(<span class="dt">u32</span>)) <span class="cf">return</span> <span class="dv">0</span>;</span>
 <span id="cb27-7"><a href="#cb27-7" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb27-8"><a href="#cb27-8" aria-hidden="true" tabindex="-1"></a>      <span class="at">const</span> nextPrimary <span class="op">=</span> primary(nextWeights);</span>
-<span id="cb27-9"><a href="#cb27-9" aria-hidden="true" tabindex="-1"></a>      i<span class="op">.*</span> <span class="op">+=</span> <span class="dv">1</span>;</span>
+<span id="cb27-8"><a href="#cb27-8" aria-hidden="true" tabindex="-1"></a>        <span class="at">const</span> nextPrimary <span class="op">=</span> primary(nextWeights);</span>
+<span id="cb27-9"><a href="#cb27-9" aria-hidden="true" tabindex="-1"></a>        i<span class="op">.*</span> <span class="op">+=</span> <span class="dv">1</span>;</span>
 <span id="cb27-10"><a href="#cb27-10" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb27-11"><a href="#cb27-11" aria-hidden="true" tabindex="-1"></a>      <span class="cf">if</span> (nextPrimary <span class="op">!=</span> <span class="dv">0</span>) <span class="cf">return</span> nextPrimary;</span>
-<span id="cb27-12"><a href="#cb27-12" aria-hidden="true" tabindex="-1"></a>   }</span>
+<span id="cb27-11"><a href="#cb27-11" aria-hidden="true" tabindex="-1"></a>        <span class="cf">if</span> (nextPrimary <span class="op">!=</span> <span class="dv">0</span>) <span class="cf">return</span> nextPrimary;</span>
+<span id="cb27-12"><a href="#cb27-12" aria-hidden="true" tabindex="-1"></a>    }</span>
 <span id="cb27-13"><a href="#cb27-13" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb27-14"><a href="#cb27-14" aria-hidden="true" tabindex="-1"></a>   <span class="cf">return</span> <span class="dv">0</span>;</span>
+<span id="cb27-14"><a href="#cb27-14" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> <span class="dv">0</span>;</span>
 <span id="cb27-15"><a href="#cb27-15" aria-hidden="true" tabindex="-1"></a>}</span></code></pre>
     </div>
     <p>
       As you can see, we progressively find the next nonzero primary weight in each CEA.
-      The iterator returns zero once it is exhausted. The comparison function, in turn,
+      The iterator returns zero once it’s exhausted. The comparison function, in turn,
       returns a null value if no meaningful difference was observed. In that case, sort
       key processing would continue to the secondary level, and so on. This is all
       straightforward enough.
@@ -1298,7 +1329,7 @@
       variable-weight character involves setting its secondary and tertiary weights to
       zero, and marking it somehow so that its primary weight is ignored at the primary
       level. We then add a “quaternary” level of weight comparison, at which point we
-      consider the <em>primary</em> weights once again—this time including the
+      consider the <em>primary</em> weights once again – this time including the
       previously ignored weights of any variable-weight code points.
     </p>
     <p>
@@ -1311,43 +1342,43 @@
       <pre
         class="sourceCode zig"
       ><code class="sourceCode zig"><span id="cb28-1"><a href="#cb28-1" aria-hidden="true" tabindex="-1"></a><span class="kw">fn</span> comparePrimaryShifting(a_cea<span class="op">:</span> []<span class="at">const</span> <span class="dt">u32</span><span class="op">,</span> b_cea<span class="op">:</span> []<span class="at">const</span> <span class="dt">u32</span>) <span class="op">?</span>std<span class="op">.</span>math<span class="op">.</span>Order {</span>
-<span id="cb28-2"><a href="#cb28-2" aria-hidden="true" tabindex="-1"></a>   <span class="at">var</span> i_a<span class="op">:</span> <span class="dt">usize</span> <span class="op">=</span> <span class="dv">0</span>;</span>
-<span id="cb28-3"><a href="#cb28-3" aria-hidden="true" tabindex="-1"></a>   <span class="at">var</span> i_b<span class="op">:</span> <span class="dt">usize</span> <span class="op">=</span> <span class="dv">0</span>;</span>
+<span id="cb28-2"><a href="#cb28-2" aria-hidden="true" tabindex="-1"></a>    <span class="at">var</span> i_a<span class="op">:</span> <span class="dt">usize</span> <span class="op">=</span> <span class="dv">0</span>;</span>
+<span id="cb28-3"><a href="#cb28-3" aria-hidden="true" tabindex="-1"></a>    <span class="at">var</span> i_b<span class="op">:</span> <span class="dt">usize</span> <span class="op">=</span> <span class="dv">0</span>;</span>
 <span id="cb28-4"><a href="#cb28-4" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb28-5"><a href="#cb28-5" aria-hidden="true" tabindex="-1"></a>   <span class="cf">while</span> (<span class="cn">true</span>) {</span>
-<span id="cb28-6"><a href="#cb28-6" aria-hidden="true" tabindex="-1"></a>      <span class="at">const</span> a_p <span class="op">=</span> nextValidPrimaryShifting(a_cea<span class="op">,</span> <span class="op">&amp;</span>i_a);</span>
-<span id="cb28-7"><a href="#cb28-7" aria-hidden="true" tabindex="-1"></a>      <span class="at">const</span> b_p <span class="op">=</span> nextValidPrimaryShifting(b_cea<span class="op">,</span> <span class="op">&amp;</span>i_b);</span>
+<span id="cb28-5"><a href="#cb28-5" aria-hidden="true" tabindex="-1"></a>    <span class="cf">while</span> (<span class="cn">true</span>) {</span>
+<span id="cb28-6"><a href="#cb28-6" aria-hidden="true" tabindex="-1"></a>        <span class="at">const</span> a_p <span class="op">=</span> nextValidPrimaryShifting(a_cea<span class="op">,</span> <span class="op">&amp;</span>i_a);</span>
+<span id="cb28-7"><a href="#cb28-7" aria-hidden="true" tabindex="-1"></a>        <span class="at">const</span> b_p <span class="op">=</span> nextValidPrimaryShifting(b_cea<span class="op">,</span> <span class="op">&amp;</span>i_b);</span>
 <span id="cb28-8"><a href="#cb28-8" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb28-9"><a href="#cb28-9" aria-hidden="true" tabindex="-1"></a>      <span class="cf">if</span> (a_p <span class="op">!=</span> b_p) <span class="cf">return</span> util<span class="op">.</span>cmp(<span class="dt">u16</span><span class="op">,</span> a_p<span class="op">,</span> b_p);</span>
-<span id="cb28-10"><a href="#cb28-10" aria-hidden="true" tabindex="-1"></a>      <span class="cf">if</span> (a_p <span class="op">==</span> <span class="dv">0</span>) <span class="cf">return</span> <span class="cn">null</span>; <span class="co">// i.e., both exhausted</span></span>
-<span id="cb28-11"><a href="#cb28-11" aria-hidden="true" tabindex="-1"></a>   }</span>
+<span id="cb28-9"><a href="#cb28-9" aria-hidden="true" tabindex="-1"></a>        <span class="cf">if</span> (a_p <span class="op">!=</span> b_p) <span class="cf">return</span> util<span class="op">.</span>cmp(<span class="dt">u16</span><span class="op">,</span> a_p<span class="op">,</span> b_p);</span>
+<span id="cb28-10"><a href="#cb28-10" aria-hidden="true" tabindex="-1"></a>        <span class="cf">if</span> (a_p <span class="op">==</span> <span class="dv">0</span>) <span class="cf">return</span> <span class="cn">null</span>; <span class="co">// i.e., both exhausted</span></span>
+<span id="cb28-11"><a href="#cb28-11" aria-hidden="true" tabindex="-1"></a>    }</span>
 <span id="cb28-12"><a href="#cb28-12" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb28-13"><a href="#cb28-13" aria-hidden="true" tabindex="-1"></a>   <span class="kw">unreachable</span>;</span>
+<span id="cb28-13"><a href="#cb28-13" aria-hidden="true" tabindex="-1"></a>    <span class="kw">unreachable</span>;</span>
 <span id="cb28-14"><a href="#cb28-14" aria-hidden="true" tabindex="-1"></a>}</span>
 <span id="cb28-15"><a href="#cb28-15" aria-hidden="true" tabindex="-1"></a></span>
 <span id="cb28-16"><a href="#cb28-16" aria-hidden="true" tabindex="-1"></a><span class="kw">fn</span> nextValidPrimaryShifting(cea<span class="op">:</span> []<span class="at">const</span> <span class="dt">u32</span><span class="op">,</span> i<span class="op">:</span> <span class="op">*</span><span class="dt">usize</span>) <span class="dt">u16</span> {</span>
-<span id="cb28-17"><a href="#cb28-17" aria-hidden="true" tabindex="-1"></a>   <span class="cf">while</span> (i<span class="op">.*</span> <span class="op">&lt;</span> cea<span class="op">.</span>len) {</span>
-<span id="cb28-18"><a href="#cb28-18" aria-hidden="true" tabindex="-1"></a>      <span class="at">const</span> nextWeights <span class="op">=</span> cea[i<span class="op">.*</span>];</span>
-<span id="cb28-19"><a href="#cb28-19" aria-hidden="true" tabindex="-1"></a>      <span class="cf">if</span> (nextWeights <span class="op">==</span> std<span class="op">.</span>math<span class="op">.</span>maxInt(<span class="dt">u32</span>)) <span class="cf">return</span> <span class="dv">0</span>;</span>
+<span id="cb28-17"><a href="#cb28-17" aria-hidden="true" tabindex="-1"></a>    <span class="cf">while</span> (i<span class="op">.*</span> <span class="op">&lt;</span> cea<span class="op">.</span>len) {</span>
+<span id="cb28-18"><a href="#cb28-18" aria-hidden="true" tabindex="-1"></a>        <span class="at">const</span> nextWeights <span class="op">=</span> cea[i<span class="op">.*</span>];</span>
+<span id="cb28-19"><a href="#cb28-19" aria-hidden="true" tabindex="-1"></a>        <span class="cf">if</span> (nextWeights <span class="op">==</span> std<span class="op">.</span>math<span class="op">.</span>maxInt(<span class="dt">u32</span>)) <span class="cf">return</span> <span class="dv">0</span>;</span>
 <span id="cb28-20"><a href="#cb28-20" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb28-21"><a href="#cb28-21" aria-hidden="true" tabindex="-1"></a>      <span class="co">// In this case, we ignore variable weights</span></span>
-<span id="cb28-22"><a href="#cb28-22" aria-hidden="true" tabindex="-1"></a>      <span class="cf">if</span> (variability(nextWeights)) {</span>
-<span id="cb28-23"><a href="#cb28-23" aria-hidden="true" tabindex="-1"></a>         i<span class="op">.*</span> <span class="op">+=</span> <span class="dv">1</span>;</span>
-<span id="cb28-24"><a href="#cb28-24" aria-hidden="true" tabindex="-1"></a>         <span class="cf">continue</span>;</span>
-<span id="cb28-25"><a href="#cb28-25" aria-hidden="true" tabindex="-1"></a>      }</span>
+<span id="cb28-21"><a href="#cb28-21" aria-hidden="true" tabindex="-1"></a>        <span class="co">// Ignore variable weights</span></span>
+<span id="cb28-22"><a href="#cb28-22" aria-hidden="true" tabindex="-1"></a>        <span class="cf">if</span> (variability(nextWeights)) {</span>
+<span id="cb28-23"><a href="#cb28-23" aria-hidden="true" tabindex="-1"></a>            i<span class="op">.*</span> <span class="op">+=</span> <span class="dv">1</span>;</span>
+<span id="cb28-24"><a href="#cb28-24" aria-hidden="true" tabindex="-1"></a>            <span class="cf">continue</span>;</span>
+<span id="cb28-25"><a href="#cb28-25" aria-hidden="true" tabindex="-1"></a>        }</span>
 <span id="cb28-26"><a href="#cb28-26" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb28-27"><a href="#cb28-27" aria-hidden="true" tabindex="-1"></a>      <span class="at">const</span> nextPrimary <span class="op">=</span> primary(nextWeights);</span>
-<span id="cb28-28"><a href="#cb28-28" aria-hidden="true" tabindex="-1"></a>      i<span class="op">.*</span> <span class="op">+=</span> <span class="dv">1</span>;</span>
+<span id="cb28-27"><a href="#cb28-27" aria-hidden="true" tabindex="-1"></a>        <span class="at">const</span> nextPrimary <span class="op">=</span> primary(nextWeights);</span>
+<span id="cb28-28"><a href="#cb28-28" aria-hidden="true" tabindex="-1"></a>        i<span class="op">.*</span> <span class="op">+=</span> <span class="dv">1</span>;</span>
 <span id="cb28-29"><a href="#cb28-29" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb28-30"><a href="#cb28-30" aria-hidden="true" tabindex="-1"></a>      <span class="cf">if</span> (nextPrimary <span class="op">!=</span> <span class="dv">0</span>) <span class="cf">return</span> nextPrimary;</span>
-<span id="cb28-31"><a href="#cb28-31" aria-hidden="true" tabindex="-1"></a>   }</span>
+<span id="cb28-30"><a href="#cb28-30" aria-hidden="true" tabindex="-1"></a>        <span class="cf">if</span> (nextPrimary <span class="op">!=</span> <span class="dv">0</span>) <span class="cf">return</span> nextPrimary;</span>
+<span id="cb28-31"><a href="#cb28-31" aria-hidden="true" tabindex="-1"></a>    }</span>
 <span id="cb28-32"><a href="#cb28-32" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb28-33"><a href="#cb28-33" aria-hidden="true" tabindex="-1"></a>   <span class="cf">return</span> <span class="dv">0</span>;</span>
+<span id="cb28-33"><a href="#cb28-33" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> <span class="dv">0</span>;</span>
 <span id="cb28-34"><a href="#cb28-34" aria-hidden="true" tabindex="-1"></a>}</span></code></pre>
     </div>
     <p>
-      It’s elegant, in its own way: variable weights are handled via primary-level
-      weights; we simply delay consideration of them until after the tertiary level.
+      It’s elegant, in a way: variable weights are handled via primary-level weights; we
+      just delay consideration of them until after the tertiary level.
     </p>
     <h2 id="performance-optimization">Performance Optimization</h2>
     <p>
@@ -1356,14 +1387,16 @@
       implementation. Performance is a major concern. The reality for a collation
       function is that it is meant to be plugged into a sort function to be used as the
       comparator; and the comparator that the UCA replaces, i.e., naïve comparison of
-      byte arrays, is <em>extremely fast</em>. If Unicode collation is too slow, then
-      perhaps people won’t bother using it. It’s already difficult enough to get
-      programmers to support Unicode-aware systems (“Back in my day, ASCII was more than
-      sufficient”). Imagine, e.g., integrating a UCA implementation into a DBMS to sort
-      millions of rows of data. We’re fortunate that the Unicode project
-      <a href="https://icu.unicode.org/">ICU</a> (International Components for Unicode)
-      maintains its own standards-compliant and generally highly performant libraries,
-      including for collation.
+      byte arrays, is <em>extremely fast</em>.
+    </p>
+    <p>
+      If Unicode collation is too slow, then people may not bother using it. It’s
+      difficult enough to get programmers to support Unicode-aware systems (“Back in my
+      day, ASCII was more than sufficient”). Imagine, e.g., integrating a UCA
+      implementation into a DBMS to sort millions of rows of data. We’re fortunate that
+      the Unicode project <a href="https://icu.unicode.org/">ICU</a> (International
+      Components for Unicode) maintains its own standards-compliant and generally highly
+      performant libraries, including for collation.
     </p>
     <p>
       One of my
@@ -1372,9 +1405,12 @@
       10,000 words, which is split on whitespace and then sorted. On my own laptop, as
       of early August 2025, my Rust implementation of the UCA can accomplish this
       sorting in about 4.5 ms. Ignoring Unicode and sorting the same data based on byte
-      values takes only 1.1 ms. The price of Unicode-awareness is always going to be a
-      slowdown of at least, say, 3x. But that’s still fast enough for use in demanding
-      production systems.
+      values takes only 1.1 ms.
+      <strong
+        >The price of Unicode-awareness is always going to be a slowdown of at least,
+        say, 3x.</strong
+      >
+      But that’s still fast enough for use in demanding production systems.
     </p>
     <p>
       Anyway, how do we even get to that point? If you try the simplest way of
@@ -1382,10 +1418,13 @@
       and searching for their weights in the <em>text files</em> of the published
       collation weight tables. This will, unsurprisingly, be on the order of hundreds of
       times slower. But it was my starting point, and it may be yours, too, if you ever
-      decide to attack the problem on your own. I’d like to outline some of the
-      performance improvement strategies that I’ve applied in the long journey from
-      “conformant but terrible” to “pretty decent.” These are not necessarily in order
-      of importance, but rather in order of computation. I hope you see what I mean.
+      decide to attack the problem.
+    </p>
+    <p>
+      I’d like to outline some of the performance improvement strategies that I applied
+      in the long journey from “conformant but terrible” to “pretty decent.” These are
+      not necessarily in order of importance, but rather in order of computation. I hope
+      you’ll see what I mean.
     </p>
     <ol type="1">
       <li>
@@ -1414,12 +1453,14 @@
           might still be a bit to spare in either the secondaries or the tertiaries; I
           can’t recall.) This makes 31 bits, leaving one for a flag for variable
           weights. Packing the weights this way is a fine tradeoff: they can be unpacked
-          with minimal effort and no allocation. An even neater optimization is enabled
-          by the fact that Unicode code points fall in the <code>u21</code> range. When
-          we build a map of multi-code-point sequences to their collation weights, we
-          can pack those <em>keys</em> into a <code>u64</code>, since they consist of
-          either two or three code points. This is much better than using, say, a vector
-          of <code>u32</code> as the key type.
+          with minimal effort and no allocation.
+        </p>
+        <p>
+          An even neater optimization is enabled by the fact that Unicode code points
+          fall in the <code>u21</code> range. When we build a map of multi-code-point
+          sequences to their collation weights, we can pack those <em>keys</em> into a
+          <code>u64</code>, since they consist of either two or three code points. This
+          is much better than using, say, a vector of <code>u32</code> as the key type.
         </p>
       </li>
       <li>
@@ -1429,19 +1470,20 @@
           two strings is a significant optimization. And it comes into play more than
           you might expect. If we’re comparing the names “Björn” and “Dvořák,” do we
           need to go through the full UCA? The answer is no, regardless of the fact that
-          the strings both contain accents. We can compare their opening characters and
+          both strings contain accents. We can compare their opening characters and
           return at once.
         </p>
       </li>
       <li>
         <p>
           <strong>Avoid unnecessary computation.</strong> This is connected to the
-          previous point, but here I have in mind the prefix-trimming step. If we’re
+          previous point, but here I have in mind the prefix trimming step. If we’re
           collating, say, “Réunionnais” and “Réunionnaise,” we shouldn’t need to hit the
           CEA step in the algorithm; one string is a prefix of the other (and they
           include no risky characters). <em>Early return is a blessing</em>. In more
-          realistic cases, we might not avoid generating the collation element arrays,
-          but we can at least limit the number of code points to consider.
+          realistic cases, we might not <em>avoid</em>
+          generating the collation element arrays, but we can at least
+          <em>limit</em> the number of code points to consider.
         </p>
       </li>
       <li>
@@ -1449,8 +1491,8 @@
           <strong>Favor lazy/incremental computation.</strong> This principle applies to
           multiple parts of my UCA implementation, most obviously when it comes to the
           sort key. If you read the UCA standard, you might get the impression that the
-          next step after generating CEAs is to turn each of them into a full sort
-          key—i.e., a list of all nonzero primary weights, followed by all nonzero
+          next step after generating CEAs is to turn each of them into a full sort key –
+          i.e., a list of all nonzero primary weights, followed by all nonzero
           secondaries, etc. This is absolutely unnecessary. It’s better to compare the
           CEAs one primary weight at a time, then one secondary weight at a time, and so
           on. Most collation decisions are reached at the primary level, after all. How
@@ -1462,7 +1504,7 @@
       <li>
         <p>
           <strong>Limit and reuse allocations.</strong> When I first started
-          implementing the UCA, in Rust, I didn’t know much about memory management, and
+          implementing the UCA in Rust, I didn’t know much about memory management, and
           I followed some inefficient practices. For example, on each run of the
           collation function, I would allocate new lists of code points for the input
           strings. A more experienced programmer suggested having the
@@ -1480,28 +1522,31 @@
       I’ve written a lot here about implementing Unicode collation, deliberately
       ignoring a major issue: some different locales demand different approaches to
       sorting text! It’s not as though the Unicode standard can establish one big table
-      of collation weights and have it work for everyone in all contexts. People using,
-      say, an Arabic locale may require that characters in the Arabic script sort
-      <em>before</em> rather than after the Latin script. The French language as used in
-      France has subtly different collation rules from Quebec French. German has
-      different
+      of collation weights and have it work for everyone in all contexts.
+    </p>
+    <p>
+      People using, say, an Arabic locale may require that characters in the Arabic
+      script sort <em>before</em> rather than after the Latin script. The French
+      language as used in France has subtly different collation rules from Quebec
+      French. German has different
       <a href="https://de.wikipedia.org/wiki/Alphabetische_Sortierung#Deutschland"
         >alphabetization schemes</a
-      >, one of them “normal,” the other intended specifically for lists of names and
-      often called “phone book order” (not that many of us still live who remember using
-      phone books).
+      >, one of them “normal,” the other designed specifically for lists of names and
+      known as “phone book order” (not that many of us still live who remember using
+      phone books). And so on.
     </p>
     <p>
       It would in fact be fair to say that each and every locale involves its own
-      adjustments to the default collation order—sometimes small, sometimes great. A
+      adjustments to the default collation order – sometimes small, sometimes great. A
       table like DUCET is a good starting point, and it comes close to working
       out-of-the-box for many languages/locales. But still, a key part of the Unicode
-      Collation Algorithm is that it is designed to be <em>tailored</em> to meet the
+      Collation Algorithm is that it is intended to be <em>tailored</em> to meet the
       needs of each locale, each set of rules for sorting, each user’s preferences.
       Another common example is that people sometimes prefer to ignore capitalization
-      differences when sorting text. This is known as adjusting the <em>strength</em> of
-      collation, and it is one of the easiest changes to make in the algorithm. Taken
-      together, the options that exist are effectively limitless.
+      differences when sorting text. This is known as adjusting the
+      <strong>strength</strong> of collation, and it is one of the easiest changes to
+      make in the algorithm. Taken together, the options that exist are effectively
+      limitless.
     </p>
     <p>
       Why have I held back from discussing tailoring? Because it would require a post of
@@ -1521,13 +1566,13 @@
         href="https://www.unicode.org/reports/tr35/tr35-collation.html#Collation_Tailorings"
         >technical standard</a
       >
-      specific to locale tailoring in collation. I’ll warn you in advance: it’s quite
-      the rabbit hole.
+      specific to locale tailoring in collation. I’ll warn you in advance: it’s on the
+      arcane side.
     </p>
     <p>
       My own implementations of the UCA have limited support for tailoring. When I was
-      writing the Rust implementation, it was intended partly for the software stack of
-      a research project to which I belong (<a
+      writing the Rust implementation, it was meant partly for the software stack of a
+      research project to which I belong (<a
         href="https://www.geschkult.fu-berlin.de/en/e/kalila-wa-dimna/"
         >at the Freie Universität Berlin</a
       >), which curates databases of textual data, much of it in the Arabic script. It
@@ -1553,23 +1598,24 @@
       One thing that I realized about Unicode as an institution is that, although they
       work largely in the open and publish standards documents that make it possible for
       us plebs to build our own systems, very few people actually do that. The best and
-      by far the most popular implementation of any given Unicode standard is the one
-      produced by people who work for Unicode—or who work at Google and are paid to
-      contribute to Unicode. Same difference, amirite? The point is that, if you want a
-      collator, you’ll probably just use the one from icu4c (or more recently icu4x).
+      by far the most popular implementation of any given Unicode standard will be the
+      one produced by people who work for Unicode – or who work at Google and are paid
+      to contribute to Unicode. Same difference. The point is that, if you want a
+      collator, you’ll probably just use the one from <code>icu4c</code> (or more
+      recently <code>icu4x</code>).
     </p>
     <p>
       Is there any point in implementing the UCA on your own? What I can say is that I
       built something of use to myself and my colleagues, while learning a tremendous
       amount about text encoding and becoming a much stronger programmer. I’m also proud
       of the performance characteristics and small dependency trees of my
-      implementations. In fact, the one in Zig has absolutely no dependencies beyond the
-      language’s standard library. If you ever want to import it, what you see is what
-      you get.
+      implementations. In fact, the one in Zig has <em>no</em> dependencies other than
+      the language’s standard library. If you ever want to import it, what you see is
+      exactly what you get.
     </p>
     <p>
       Please feel free to get in touch with me if you have any questions, corrigenda,
-      etc. Anyone who reads this far has my appreciation and respect.
+      etc. Anyone who reads this far has my appreciation and respect!
     </p>
   </body>
 </html>
