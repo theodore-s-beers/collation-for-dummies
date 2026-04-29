@@ -348,7 +348,7 @@
     </p>
     <p>
       Both of these representations will break the naïve approach to sorting, in their
-      own ways. <code>C9</code> as a byte value is greater than any in the ASCII/Basic
+      own ways. <code>0xC9</code> as a byte value is greater than any in the ASCII/Basic
       Latin table, meaning that “Élodie” would sort after, say, “Zardoz.” Using the
       decomposed form seems promising – the first byte value is simply that of E,
       appropriate for sorting – but the combining accent character introduces new
@@ -544,8 +544,8 @@
     <p>
       For the sake of thoroughness, let’s also consider two words that differ only in
       case, i.e., at the tertiary level. The name “Frank” and the common adjective
-      “frank” will work nicely for this. We can add to the previous list of weights the
-      values for lowercase f:
+      “frank” will work nicely for this. We can add the values for lowercase f to the
+      previous list of weights:
     </p>
     <div class="sourceCode" id="cb11">
       <pre
@@ -650,7 +650,7 @@
       horrifyingly complex:
     </p>
     <ol type="1">
-      <li><p>Handle edge cases (i.e., equal is equal and returns immediately).</p></li>
+      <li><p>Handle edge cases (i.e., identical inputs return immediately).</p></li>
       <li>
         <p>
           Ensure that the input strings are valid UTF-8 (applying fixes if needed), and
@@ -707,7 +707,7 @@
       </li>
     </ol>
     <p>
-      We can look at these steps one-by-one – at least, for steps where there’s anything
+      We can look at these steps one by one – at least, for steps where there’s anything
       worth saying. One fun part of implementing the UCA in Zig was that I opted not to
       use any dependencies outside the standard library. So I dealt with problems like
       UTF-8 validation and decoding and NFD normalization in my own code. I’ll show
@@ -831,12 +831,11 @@
       We’ve seen a simple example: “É,” the Latin-script capital E with an acute accent.
       This letter can be, and most often is, represented by the single code point
       <code>U+00C9</code>. In fact, the great majority of digital text that we encounter
-      these days is in the UTF-8 encoding and in form
+      these days is UTF-8-encoded and in form
       <a href="https://en.wikipedia.org/wiki/Unicode_equivalence#Normal_forms">NFC</a>,
       i.e., with characters <em>composed</em> into shorter representations where
       possible, and upholding <em>canonical equivalence</em>. (That is, characters that
-      are considered equivalent are guaranteed to be represented the same way in form
-      NFC.)
+      are considered equivalent are guaranteed to be represented the same way in NFC.)
     </p>
     <p>
       Returning to “É,” it can also be represented via two code points,
@@ -852,7 +851,7 @@
     </p>
     <p>
       We risk going down the rabbit hole, but the main point here should be
-      straightforward enough. Most text data in the wild is in form NFC, and we need to
+      straightforward enough. Most text data in the wild is in NFC, and we need to
       convert to NFD to apply the Unicode Collation Algorithm. How can we do that? It
       ends up being one of those problems that teaches you a lot about the Unicode
       standard if you want to write your own implementation. This is because you need to
@@ -924,13 +923,12 @@
       The only trick here, apart from the weird Korean stuff, is that we need an
       efficient means of fetching the canonical decomposition (if any) of a given code
       point. I did this in a naïve but functional way, by building a hash table from
-      Unicode data. My <code>getDecomp</code>
-      function simply checks in that table. (The crazier part is that is that I have
-      several data structures like this that are derived from Unicode data, and for
-      performance reasons I have them serialized in binary formats. These maps are in
-      some cases large, up to a few hundred KiB on disk, but they can be loaded rapidly
-      at runtime, and a given
-      <code>Collator</code> instance needs to do so only once.)
+      Unicode data. My <code>getDecomp</code> function simply checks in that table. (The
+      crazier part is that I have several data structures like this that are derived
+      from Unicode data, and for performance reasons I have them serialized in binary
+      formats. These maps are in some cases large, up to a few hundred KiB on disk, but
+      they can be loaded rapidly at runtime, and a given <code>Collator</code> instance
+      needs to do so only once.)
     </p>
     <p>
       Once decomposition has been accomplished, all that’s left for NFD is to fix the
@@ -1015,7 +1013,7 @@
 <span id="cb20-36"><a href="#cb20-36" aria-hidden="true" tabindex="-1"></a>}</span></code></pre>
     </div>
     <p>
-      As you can see, this relies on repeated calls of <code>getCombiningClass</code>. I
+      As you can see, this relies on repeated calls to <code>getCombiningClass</code>. I
       found, while benchmarking my UCA implementation, that looking up combining classes
       is one of the hottest paths in the library. It demands a special degree of
       optimization, which is an interesting problem but beyond the scope of this post.
@@ -1144,7 +1142,7 @@
       prefer to ignore the space at the primary, secondary, and tertiary levels, so that
       “foo baz” and “foobaz” would be grouped together, differing only at a
       <em>quaternary</em> level. This is known in the UCA as the
-      <strong>“shifted” approach</strong>, and it is made possible by the assigning of
+      <strong>“shifted” approach</strong>, and it is made possible by the assignment of
       <strong>variable weights</strong> to the relevant code points in the tables.
     </p>
     <div class="sourceCode" id="cb24">
@@ -1537,9 +1535,9 @@
     <h2 id="what-about-tailoring">What About Tailoring?</h2>
     <p>
       I’ve written a lot here about implementing Unicode collation, deliberately
-      ignoring a major issue: some different locales demand different approaches to
-      sorting text! It’s not as though the Unicode standard can establish one big table
-      of collation weights and have it work for everyone in all contexts.
+      ignoring a major issue: different locales demand different approaches to sorting
+      text! It’s not as though the Unicode standard can establish one big table of
+      collation weights and have it work for everyone in all contexts.
     </p>
     <p>
       People using, say, an Arabic locale may require that characters in the Arabic
@@ -1612,12 +1610,12 @@
       internationalization, or diversity in languages and scripts.
     </p>
     <p>
-      One thing that I realized about Unicode as an institution is that, although they
-      work largely in the open and publish standards documents that make it possible for
-      us plebs to build our own systems, very few people actually do that. The best and
-      by far the most popular implementation of any given Unicode standard will be the
-      one produced by people who work for Unicode – or who work at Google and are paid
-      to contribute to Unicode. Same difference. The point is that, if you want a
+      One thing that I realized about Unicode as an institution is that, although it
+      works largely in the open and publishes standards documents that make it possible
+      for us plebs to build our own systems, very few people actually do that. The best
+      and by far the most popular implementation of any given Unicode standard will be
+      the one produced by people who work for Unicode – or who work at Google and are
+      paid to contribute to Unicode. Same difference. The point is that, if you want a
       collator, you’ll probably just use the one from <code>icu4c</code> (or more
       recently <code>icu4x</code>).
     </p>

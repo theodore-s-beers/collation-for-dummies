@@ -72,7 +72,7 @@ respectively. (The latter, "decomposed" representation is the form that we gener
 want for Unicode sorting/collation. More on this later...)
 
 Both of these representations will break the naïve approach to sorting, in their own
-ways. `C9` as a byte value is greater than any in the ASCII/Basic Latin table, meaning
+ways. `0xC9` as a byte value is greater than any in the ASCII/Basic Latin table, meaning
 that "Élodie" would sort after, say, "Zardoz." Using the decomposed form seems promising
 -- the first byte value is simply that of E, appropriate for sorting -- but the
 combining accent character introduces new problems. `0x301` is too large to be
@@ -238,7 +238,7 @@ is higher than the others. We reach a decision at index `1` in the secondary sor
 
 For the sake of thoroughness, let's also consider two words that differ only in case,
 i.e., at the tertiary level. The name "Frank" and the common adjective "frank" will work
-nicely for this. We can add to the previous list of weights the values for lowercase f:
+nicely for this. We can add the values for lowercase f to the previous list of weights:
 
 ```default
 0066  ; [.2422.0020.0002] # LATIN SMALL LETTER F
@@ -328,7 +328,7 @@ pub fn collate(self: *Collator, a: []const u8, b: []const u8) !std.math.Order {
 This can be broken down into eight steps, some of them quite simple, others horrifyingly
 complex:
 
-1. Handle edge cases (i.e., equal is equal and returns immediately).
+1. Handle edge cases (i.e., identical inputs return immediately).
 
 2. Ensure that the input strings are valid UTF-8 (applying fixes if needed), and decode
    from bytes to Unicode scalar values.
@@ -359,7 +359,7 @@ complex:
 8. If the sort keys somehow came back identical, there is a final option to use naïve
    comparison of the input strings as a tiebreaker.
 
-We can look at these steps one-by-one -- at least, for steps where there's anything
+We can look at these steps one by one -- at least, for steps where there's anything
 worth saying. One fun part of implementing the UCA in Zig was that I opted not to use
 any dependencies outside the standard library. So I dealt with problems like UTF-8
 validation and decoding and NFD normalization in my own code. I'll show snippets of how
@@ -465,12 +465,11 @@ code points must be broken down into those.
 
 We've seen a simple example: "É," the Latin-script capital E with an acute accent. This
 letter can be, and most often is, represented by the single code point `U+00C9`. In
-fact, the great majority of digital text that we encounter these days is in the UTF-8
-encoding and in form
-[NFC](https://en.wikipedia.org/wiki/Unicode_equivalence#Normal_forms), i.e., with
-characters _composed_ into shorter representations where possible, and upholding
+fact, the great majority of digital text that we encounter these days is UTF-8-encoded
+and in form [NFC](https://en.wikipedia.org/wiki/Unicode_equivalence#Normal_forms), i.e.,
+with characters _composed_ into shorter representations where possible, and upholding
 _canonical equivalence_. (That is, characters that are considered equivalent are
-guaranteed to be represented the same way in form NFC.)
+guaranteed to be represented the same way in NFC.)
 
 Returning to "É," it can also be represented via two code points, `U+0045` for the
 capital letter E, and `U+0301` for the combining acute accent. This is another canonical
@@ -483,9 +482,9 @@ level, and for the accent to make the collation decision between the two words a
 the right spot (i.e., just after the initial letter/index).
 
 We risk going down the rabbit hole, but the main point here should be straightforward
-enough. Most text data in the wild is in form NFC, and we need to convert to NFD to
-apply the Unicode Collation Algorithm. How can we do that? It ends up being one of those
-problems that teaches you a lot about the Unicode standard if you want to write your own
+enough. Most text data in the wild is in NFC, and we need to convert to NFD to apply the
+Unicode Collation Algorithm. How can we do that? It ends up being one of those problems
+that teaches you a lot about the Unicode standard if you want to write your own
 implementation. This is because you need to be able to determine, for any code point,
 what its canonical decomposition is (if any); and how those decomposed parts must be
 ordered. I tried to keep this understandable in my code, with a high-level function that
@@ -549,8 +548,8 @@ fn decompose(coll: *Collator, input: *std.ArrayList(u32)) !void {
 The only trick here, apart from the weird Korean stuff, is that we need an efficient
 means of fetching the canonical decomposition (if any) of a given code point. I did this
 in a naïve but functional way, by building a hash table from Unicode data. My
-`getDecomp` function simply checks in that table. (The crazier part is that is that I
-have several data structures like this that are derived from Unicode data, and for
+`getDecomp` function simply checks in that table. (The crazier part is that I have
+several data structures like this that are derived from Unicode data, and for
 performance reasons I have them serialized in binary formats. These maps are in some
 cases large, up to a few hundred KiB on disk, but they can be loaded rapidly at runtime,
 and a given `Collator` instance needs to do so only once.)
@@ -627,7 +626,7 @@ fn reorder(input: []u32) void {
 }
 ```
 
-As you can see, this relies on repeated calls of `getCombiningClass`. I found, while
+As you can see, this relies on repeated calls to `getCombiningClass`. I found, while
 benchmarking my UCA implementation, that looking up combining classes is one of the
 hottest paths in the library. It demands a special degree of optimization, which is an
 interesting problem but beyond the scope of this post.
@@ -740,7 +739,7 @@ Does that look wrong to you? It may not; treating the space as an ordinary chara
 collation purposes is one valid, common approach. But a user might prefer to ignore the
 space at the primary, secondary, and tertiary levels, so that "foo baz" and "foobaz"
 would be grouped together, differing only at a _quaternary_ level. This is known in the
-UCA as the **"shifted" approach**, and it is made possible by the assigning of
+UCA as the **"shifted" approach**, and it is made possible by the assignment of
 **variable weights** to the relevant code points in the tables.
 
 ```default
@@ -1043,9 +1042,9 @@ see what I mean.
 ## What About Tailoring?
 
 I've written a lot here about implementing Unicode collation, deliberately ignoring a
-major issue: some different locales demand different approaches to sorting text! It's
-not as though the Unicode standard can establish one big table of collation weights and
-have it work for everyone in all contexts.
+major issue: different locales demand different approaches to sorting text! It's not as
+though the Unicode standard can establish one big table of collation weights and have it
+work for everyone in all contexts.
 
 People using, say, an Arabic locale may require that characters in the Arabic script
 sort _before_ rather than after the Latin script. The French language as used in France
@@ -1100,8 +1099,8 @@ period of a few years (on and off; mostly off). I hope this will prove useful, o
 least interesting, to others whose nerd interests touch on Unicode,
 internationalization, or diversity in languages and scripts.
 
-One thing that I realized about Unicode as an institution is that, although they work
-largely in the open and publish standards documents that make it possible for us plebs
+One thing that I realized about Unicode as an institution is that, although it works
+largely in the open and publishes standards documents that make it possible for us plebs
 to build our own systems, very few people actually do that. The best and by far the most
 popular implementation of any given Unicode standard will be the one produced by people
 who work for Unicode -- or who work at Google and are paid to contribute to Unicode.
