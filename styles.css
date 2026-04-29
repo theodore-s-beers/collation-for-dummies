@@ -1,39 +1,60 @@
 body {
+  background-color: #fbfaf9;
   font-family: Merriweather, serif;
   margin: 0 auto;
   max-width: 84ch;
-  padding: 1rem;
-  padding-bottom: 2rem;
+  padding: 1rem 1rem 2rem;
+}
+
+a:link {
+  color: #1d4ed8;
+}
+
+a:visited {
+  color: #6b21a8;
 }
 
 code {
   font-family: "Cascadia Code", sans-serif;
-  font-size: 0.95rem;
+}
+
+code.sourceCode {
+  font-size: 0.95em;
 }
 
 div.sourceCode {
   border-radius: 0.5rem;
   margin-top: 1.5rem;
+  padding: 0.5rem;
 }
 
 h2,
-h3,
+h3 {
+  margin-top: 1.5rem;
+}
+
+header {
+  margin-bottom: 1.5rem;
+}
+
+li,
 p {
+  line-height: 1.6;
+}
+
+p,
+ul {
   margin-top: 1rem;
 }
 
+p code {
+  color: #9a3412;
+}
+
 p.author {
-  margin-top: 0.5rem;
+  margin-top: 0.6rem;
 }
 
 p.date {
-  margin: 0;
-}
-
-pre.sourceCode {
-  margin: 0.5rem;
-}
-
-ul {
-  margin-top: 0.5rem;
+  margin-top: 0.3rem;
 }
