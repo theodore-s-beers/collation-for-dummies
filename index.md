@@ -379,7 +379,7 @@ seasoned SWE would have things to learn from our curriculum, e.g., the
 [two excellent](https://www.boot.dev/courses/learn-git)
 [Git courses](https://www.boot.dev/courses/learn-git-2) authored by ThePrimeagen. I
 invite you to check out our courses -- always free to read -- and to
-[join our Discord server](https://discord.gg/EEkFwbv).
+[join our Discord server](https://www.boot.dev/community).
 
 ## From UTF-8 to Code Points
 
