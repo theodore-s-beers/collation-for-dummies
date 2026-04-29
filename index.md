@@ -286,7 +286,7 @@ cocktail party.
 But I want to go on and show, in greater detail, what is actually involved in writing a
 conformant implementation of the UCA -- i.e., an implementation that passes the
 punishingly rigorous
-[conformance tests](https://www.unicode.org/Public/UCA/latest/CollationTest.html) that
+[conformance tests](https://www.unicode.org/Public/UCA/16.0.0/CollationTest.html) that
 are published alongside the technical standard. So if you're interested in digging
 deeper, feel free to stick around and keep reading.
 
@@ -364,6 +364,22 @@ worth saying. One fun part of implementing the UCA in Zig was that I opted not t
 any dependencies outside the standard library. So I dealt with problems like UTF-8
 validation and decoding and NFD normalization in my own code. I'll show snippets of how
 these components work. Still, the main focus will be on the core logic of the UCA.
+
+## A Note of Acknowledgment
+
+I'm writing this post in a personal capacity, but I wanted to take a moment to mention
+how much I learned about programming by going through the
+[Boot.dev](https://www.boot.dev/) curriculum. I was a student on the platform a few
+years ago, and it helped me pivot my career from humanities academia to research
+software engineering. More recently, I've joined the Boot.dev team to work on producing
+new courses and editing existing ones.
+
+Boot.dev is a decidedly unpretentious but serious community of programmers. Even a
+seasoned SWE would have things to learn from our curriculum, e.g., the
+[two excellent](https://www.boot.dev/courses/learn-git)
+[Git courses](https://www.boot.dev/courses/learn-git-2) authored by ThePrimeagen. I
+invite you to check out our courses -- always free to read -- and to
+[join our Discord server](https://discord.gg/EEkFwbv).
 
 ## From UTF-8 to Code Points
 
@@ -565,7 +581,7 @@ U+0651 # Arabic shadda       CCC 33
 The above sequence meets the criteria of form NFD. Note that it is _entirely
 conceivable_ that someone might type the _shadda_ before the vowel; I do so myself. In
 that case, if the input order were preserved, then reordering would be needed for NFD to
-be achieved – and, by extension, for Unicode collation.
+be achieved -- and, by extension, for Unicode collation.
 
 The last thing that I'll show here is my `reorder` function, mostly because it takes the
 form of a modified bubble sort, which amuses me. In all my years of work as a
@@ -1099,5 +1115,6 @@ characteristics and small dependency trees of my implementations. In fact, the o
 Zig has _no_ dependencies other than the language's standard library. If you ever want
 to import it, what you see is exactly what you get.
 
-Please feel free to get in touch with me if you have any questions, corrigenda, etc.
-Anyone who reads this far has my appreciation and respect!
+Please feel free to [get in touch](https://www.theobeers.com/links/) with me if you have
+any questions, corrigenda, etc. Anyone who reads this far has my appreciation and
+respect!
