@@ -471,20 +471,20 @@ with characters _composed_ into shorter representations where possible, and upho
 _canonical equivalence_. (That is, characters that are considered equivalent are
 guaranteed to be represented the same way in NFC.)
 
-Returning to "É," it can also be represented via two code points, `U+0045` for the
-capital letter E, and `U+0301` for the combining acute accent. This is another canonical
-Unicode form, called NFD. I'm sure you get the idea, at least in a basic sense. Whereas
-NFC has composed characters, NFD has them decomposed and with the constituent parts in a
-standard order. You can perhaps also understand how this is helpful -- necessary, in
-fact -- for proper sorting. Breaking down "É" into "E followed by an acute accent" is
-what allowed us to derive identical sort keys for "Élodie" and "Elodie" at the primary
-level, and for the accent to make the collation decision between the two words at just
-the right spot (i.e., just after the initial letter/index).
+"É," as we know, can also be represented via two code points: `U+0045` for the capital
+letter E, and `U+0301` for the combining acute accent. This is another canonical Unicode
+form, called NFD. Whereas NFC has composed characters, NFD has them decomposed and with
+the constituent parts in a standard order. You can probably understand how this is
+helpful -- indispensable, even -- for proper sorting. Breaking down "É" into "E followed
+by an acute accent" is what allowed us to derive identical sort keys for "Élodie" and
+"Elodie" at the primary level, and for the accent to make the collation decision between
+the two words in the appropriate spot at the secondary level (i.e., just after the
+initial letter/index).
 
-We risk going down the rabbit hole, but the main point here should be straightforward
-enough. Most text data in the wild is in NFC, and we need to convert to NFD to apply the
-Unicode Collation Algorithm. How can we do that? It ends up being one of those problems
-that teaches you a lot about the Unicode standard if you want to write your own
+We won't go too far down the rabbit hole, but the main point here should be
+straightforward. Most text data in the wild is in NFC, and we need to convert to NFD to
+apply the Unicode Collation Algorithm. How can we do that? It ends up being one of those
+problems that teaches you a lot about the Unicode standard if you want to write your own
 implementation. This is because you need to be able to determine, for any code point,
 what its canonical decomposition is (if any); and how those decomposed parts must be
 ordered. I tried to keep this understandable in my code, with a high-level function that
@@ -500,15 +500,14 @@ pub fn makeNFD(coll: *Collator, input: *std.ArrayList(u32)) !void {
 }
 ```
 
-As you can see, we have a short `makeNFD` function that does three things. First, it
-checks whether the input meets
-[certain criteria](https://www.unicode.org/notes/tn5/#FCD) that obviate the need for any
-decomposition. (FCD is short for "fast NFC/NFD.") We can set aside the details of this
-part for the time being. Second, in case NFD conversion _is_ needed, we decompose the
-input code points. Finally, we ensure that the decomposed code points are in their
-canonical ordering.
+Here we have a short `makeNFD` function that does three things. First, it checks whether
+the input meets [certain criteria](https://www.unicode.org/notes/tn5/#FCD) that obviate
+the need for any decomposition. (FCD is short for "fast NFC/NFD.") We can set aside the
+details of this part for the time being. Second, in case NFD conversion _is_ needed, we
+decompose the input code points. Finally, we ensure that the decomposed code points are
+in their canonical ordering.
 
-Sounds easy, doesn't it? But let's have a look at the `decompose` function. I've added
+Sounds easy, doesn't it? Let's have a look at the `decompose` function. I've added
 comments for clarity.
 
 ```zig
@@ -556,11 +555,11 @@ and a given `Collator` instance needs to do so only once.)
 
 Once decomposition has been accomplished, all that's left for NFD is to fix the order of
 the code points so that it matches what is expected canonically in the Unicode standard.
-This is governed by a property called "canonical combining class." In the case of what
+This is governed by a property called **canonical combining class**. In the case of what
 we might refer to as _base letters_, the combining class is `0`, i.e., "not reordered."
 Such code points are never moved in normalization. Diacritics, on the other hand, have a
 variety of nonzero combining class values; and when they appear next to one another in a
-sequence, they should be in order of ascending combining class.
+sequence, they should be in order of _non-decreasing_ combining class.
 
 The most common scenario in which this might become an issue is when a letter has two or
 more diacritics attached to it. I can say from my own academic background that this
@@ -568,8 +567,8 @@ happens with some frequency in Arabic text. There is, for example, a diacritic c
 _shadda_, which serves to add emphasis to a consonant; and there are other diacritics
 that serve as short vowel marks. It is by no means uncommon to see an Arabic letter that
 has both a _shadda_ and a vowel mark on it. In such cases, the base letter would have a
-combining class of `0`, and the diacritics should, ideally, be set in order of ascending
-combining class. Here's an example:
+combining class of `0`, and the diacritics should, ideally, be set so that each has a
+combining class `>=` the one preceding it.
 
 ```default
 U+0628 # Arabic letter bā’   CCC 0
@@ -1107,7 +1106,7 @@ who work for Unicode -- or who work at Google and are paid to contribute to Unic
 Same difference. The point is that, if you want a collator, you'll probably just use the
 one from `icu4c` (or more recently `icu4x`).
 
-Is there any point in implementing the UCA on your own? What I can say is that I built
+Is there any reason to implement the UCA on your own? What I can say is that I built
 something of use to myself and my colleagues, while learning a tremendous amount about
 text encoding and becoming a much stronger programmer. I'm also proud of the performance
 characteristics and small dependency trees of my implementations. In fact, the one in
